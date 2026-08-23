@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
+from strands.interrupt import InterruptException
 
 from stacks.hitl.classify import (
     Tier,
@@ -84,7 +85,11 @@ class HitlGateHook(HookProvider):
             token_related_action_id = approval_token.get("related_action_id") if approval_token else None
             if is_approval_valid(tier, approver_role, workflow) and token_related_action_id == related_action_id:
                 return
+        except Exception as exc:
+            event.cancel_tool = "blocked_gate_error"
+            return
 
+        try:
             response = event.interrupt(
                 f"hitl:{tool_name}:{case_id}",
                 reason={"tier": tier.value, "tool": tool_name, "workflow": workflow.value, "case_id": case_id},
@@ -103,8 +108,8 @@ class HitlGateHook(HookProvider):
                 "approver_role": resumed_role,
                 "related_action_id": related_action_id,
             }
-        except Exception as exc:
-            event.cancel_tool = f"blocked_gate_error: {exc}"
+        except InterruptException:
+            raise
 
 
 def _case_id_for(workflow: Workflow, tool_input: dict[str, Any]) -> str:

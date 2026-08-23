@@ -1,6 +1,9 @@
+import pytest
+
+from strands.interrupt import InterruptException
+
 from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.hitl_gate import HitlGateHook
-from stacks.hitl.classify import Workflow
 from stacks.types import SensitivityFlag
 
 
@@ -14,6 +17,10 @@ class _FakeEvent:
     per this plan's "Global Constraints" (zero AWS calls outside Task 11).
     The genuine strands.hooks.BeforeToolCallEvent + Agent.interrupt/resume
     mechanism gets its one true end-to-end exercise in Task 11.
+
+    Models the real SDK's two-pass interrupt mechanism: raises InterruptException
+    on first call (when no response yet), and returns the response on subsequent
+    calls (after human input).
     """
 
     def __init__(self, tool_name: str, tool_input: dict, interrupt_response=None):
@@ -24,6 +31,8 @@ class _FakeEvent:
 
     def interrupt(self, name: str, reason=None):
         self.interrupt_calls.append((name, reason))
+        if self._interrupt_response is None:
+            raise InterruptException(name)
         return self._interrupt_response
 
 
@@ -64,10 +73,10 @@ def test_green_case_never_calls_interrupt():
 def test_red_case_without_approval_raises_interrupt_and_cancels_on_no_response():
     hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
     event = _FakeEvent("resolve_room_conflict", {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
-    hook._gate(event)
+    with pytest.raises(InterruptException):
+        hook._gate(event)
     assert len(event.interrupt_calls) == 1
     assert event.interrupt_calls[0][1]["tier"] == "RED"
-    assert event.cancel_tool != False  # noqa: E712 -- cancel_tool holds a message string, not just a bool
 
 
 def test_red_case_with_valid_prior_approval_never_interrupts():
@@ -88,10 +97,10 @@ def test_red_case_with_valid_prior_approval_never_interrupts():
 def test_yellow_case_with_ill_routing():
     hook = _hook_with_ill_cached("multiple_editions", [])
     event = _FakeEvent("route_ill_request", {"action": "commit", "ill_request_id": "ill_req_123"})
-    hook._gate(event)
+    with pytest.raises(InterruptException):
+        hook._gate(event)
     assert len(event.interrupt_calls) == 1
     assert event.interrupt_calls[0][1]["tier"] == "YELLOW"
-    assert event.cancel_tool != False
 
 
 def test_red_case_approved_resume_sets_approval_token():
@@ -128,7 +137,8 @@ def test_red_case_with_wrong_role_prior_token_falls_through_to_interrupt():
             "approval_token": {"token": "t", "approver_role": "branch_manager", "related_action_id": "room_conflict:b1:b2"},
         },
     )
-    hook._gate(event)
+    with pytest.raises(InterruptException):
+        hook._gate(event)
     assert len(event.interrupt_calls) == 1
     assert event.interrupt_calls[0][1]["tier"] == "RED"
 
@@ -143,7 +153,8 @@ def test_red_case_with_cross_case_token_falls_through_to_interrupt():
             "approval_token": {"token": "t", "approver_role": "librarian_case_review", "related_action_id": "room_conflict:different:case"},
         },
     )
-    hook._gate(event)
+    with pytest.raises(InterruptException):
+        hook._gate(event)
     assert len(event.interrupt_calls) == 1
     assert event.interrupt_calls[0][1]["tier"] == "RED"
 
