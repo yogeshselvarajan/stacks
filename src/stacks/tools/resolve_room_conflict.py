@@ -54,6 +54,9 @@ def make_resolve_room_conflict(
         if library_id != session_library_id:
             return {"status": "error", "content": [{"text": "cross_tenant_denied"}]}
 
+        if len(conflicting_booking_ids) < 2:
+            return {"status": "error", "content": [{"text": "invalid_request: conflicting_booking_ids requires at least two distinct booking ids"}]}
+
         if len(set(conflicting_booking_ids)) != len(conflicting_booking_ids):
             return {"status": "error", "content": [{"text": "invalid_request: duplicate booking ids in conflicting_booking_ids"}]}
 
@@ -146,22 +149,25 @@ def _bookings_overlap(bookings: list[BookingRecord]) -> bool:
 
 def _rank_resolutions(bookings: list[BookingRecord], clause_id: str) -> list[dict[str, Any]]:
     ranked = sorted(bookings, key=lambda b: _PRIORITY[b.booking_type.value], reverse=True)
-    keeper, yielder = ranked[0], ranked[-1]
-    score = float(_PRIORITY[keeper.booking_type.value] - _PRIORITY[yielder.booking_type.value])
-    candidates = [{
-        "booking_id_that_yields": yielder.booking_id,
-        "booking_id_that_keeps": keeper.booking_id,
-        "deterministic_score": score,
-        "rule_applied": clause_id,
-    }]
-    # If there's a tie (equal priority), also return the reverse as a candidate
-    if score == 0.0:
+    keeper = ranked[0]
+    keeper_priority = _PRIORITY[keeper.booking_type.value]
+
+    # Find minimum priority among all bookings
+    min_priority = min(_PRIORITY[b.booking_type.value] for b in bookings)
+    # Find all bookings with minimum priority (the potential yielders)
+    yielders = [b for b in bookings if _PRIORITY[b.booking_type.value] == min_priority]
+
+    # Generate a candidate for each yielder
+    candidates = []
+    for yielder in yielders:
+        score = float(keeper_priority - min_priority)
         candidates.append({
-            "booking_id_that_yields": keeper.booking_id,
-            "booking_id_that_keeps": yielder.booking_id,
-            "deterministic_score": 0.0,
+            "booking_id_that_yields": yielder.booking_id,
+            "booking_id_that_keeps": keeper.booking_id,
+            "deterministic_score": score,
             "rule_applied": clause_id,
         })
+
     return candidates
 
 

@@ -312,3 +312,117 @@ def test_malformed_approval_token_treated_as_none():
     )
     body = result["content"][0]["json"]
     assert body["status"] == "blocked_missing_approval"
+
+
+# Second round fixes: Regression and 3+ booking tie handling
+def test_single_booking_id_rejected():
+    tool_fn, _, _ = _build()
+    result = tool_fn(library_id="lib_demo", action="evaluate", conflicting_booking_ids=["b_recurring_a"])
+    assert result["status"] == "error"
+    assert "at least two distinct booking ids" in result["content"][0]["text"]
+
+
+def test_empty_booking_ids_rejected():
+    tool_fn, _, _ = _build()
+    result = tool_fn(library_id="lib_demo", action="evaluate", conflicting_booking_ids=[])
+    assert result["status"] == "error"
+    assert "at least two distinct booking ids" in result["content"][0]["text"]
+
+
+def test_three_bookings_with_two_at_lowest_priority_detects_tie():
+    tool_fn, repo, _ = _build()
+    # Create 3 bookings: 1 RECURRING_PROGRAM (high priority) and 2 WALK_IN (lowest priority, tied)
+    repo.save_booking(BookingRecord(
+        booking_id="b_3way_1", library_id="lib_demo", room_id="room_f",
+        start=datetime(2026, 9, 4, 14, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 4, 15, 0, tzinfo=timezone.utc),
+        booked_by="patron_p", booking_type=BookingType.RECURRING_PROGRAM,
+    ))
+    repo.save_booking(BookingRecord(
+        booking_id="b_3way_2", library_id="lib_demo", room_id="room_f",
+        start=datetime(2026, 9, 4, 14, 30, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 4, 15, 30, tzinfo=timezone.utc),
+        booked_by="patron_q", booking_type=BookingType.WALK_IN,
+    ))
+    repo.save_booking(BookingRecord(
+        booking_id="b_3way_3", library_id="lib_demo", room_id="room_f",
+        start=datetime(2026, 9, 4, 14, 45, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 4, 15, 45, tzinfo=timezone.utc),
+        booked_by="patron_r", booking_type=BookingType.WALK_IN,
+    ))
+    result = tool_fn(library_id="lib_demo", action="evaluate", conflicting_booking_ids=["b_3way_1", "b_3way_2", "b_3way_3"])
+    body = result["content"][0]["json"]
+    # Should have 2 candidates (one for each WALK_IN yielding to RECURRING_PROGRAM)
+    assert len(body["candidate_resolutions"]) == 2
+    assert body["tie"] is True
+    # Both candidates should have the same deterministic_score
+    assert body["candidate_resolutions"][0]["deterministic_score"] == body["candidate_resolutions"][1]["deterministic_score"]
+    # Both should be WALK_IN bookings yielding to RECURRING_PROGRAM
+    assert body["candidate_resolutions"][0]["booking_id_that_keeps"] == "b_3way_1"
+    assert body["candidate_resolutions"][1]["booking_id_that_keeps"] == "b_3way_1"
+    assert set([body["candidate_resolutions"][0]["booking_id_that_yields"], body["candidate_resolutions"][1]["booking_id_that_yields"]]) == {"b_3way_2", "b_3way_3"}
+
+
+def test_three_booking_tie_blocks_commit_without_approval():
+    tool_fn, repo, _ = _build()
+    # Create 3 bookings: 1 STAFF_INTERNAL (high) and 2 WALK_IN (lowest, tied)
+    repo.save_booking(BookingRecord(
+        booking_id="b_3tie_1", library_id="lib_demo", room_id="room_g",
+        start=datetime(2026, 9, 5, 14, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 5, 15, 0, tzinfo=timezone.utc),
+        booked_by="patron_s", booking_type=BookingType.STAFF_INTERNAL,
+    ))
+    repo.save_booking(BookingRecord(
+        booking_id="b_3tie_2", library_id="lib_demo", room_id="room_g",
+        start=datetime(2026, 9, 5, 14, 30, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 5, 15, 30, tzinfo=timezone.utc),
+        booked_by="patron_t", booking_type=BookingType.WALK_IN,
+    ))
+    repo.save_booking(BookingRecord(
+        booking_id="b_3tie_3", library_id="lib_demo", room_id="room_g",
+        start=datetime(2026, 9, 5, 14, 45, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 5, 15, 45, tzinfo=timezone.utc),
+        booked_by="patron_u", booking_type=BookingType.WALK_IN,
+    ))
+    tool_fn(library_id="lib_demo", action="evaluate", conflicting_booking_ids=["b_3tie_1", "b_3tie_2", "b_3tie_3"])
+    # Try to commit without approval (GREEN tier, but TIE requires approval regardless)
+    result = tool_fn(
+        library_id="lib_demo", action="commit",
+        conflicting_booking_ids=["b_3tie_1", "b_3tie_2", "b_3tie_3"],
+        chosen_resolution_booking_id="b_3tie_2", rationale="Yields per RBP-1.",
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "blocked_missing_approval"
+
+
+def test_three_booking_tie_commits_with_valid_approval():
+    tool_fn, repo, _ = _build()
+    # Create 3 bookings: 1 STAFF_INTERNAL (high) and 2 WALK_IN (lowest, tied)
+    repo.save_booking(BookingRecord(
+        booking_id="b_3tie_x", library_id="lib_demo", room_id="room_h",
+        start=datetime(2026, 9, 6, 14, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 6, 15, 0, tzinfo=timezone.utc),
+        booked_by="patron_v", booking_type=BookingType.STAFF_INTERNAL,
+    ))
+    repo.save_booking(BookingRecord(
+        booking_id="b_3tie_y", library_id="lib_demo", room_id="room_h",
+        start=datetime(2026, 9, 6, 14, 30, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 6, 15, 30, tzinfo=timezone.utc),
+        booked_by="patron_w", booking_type=BookingType.WALK_IN,
+    ))
+    repo.save_booking(BookingRecord(
+        booking_id="b_3tie_z", library_id="lib_demo", room_id="room_h",
+        start=datetime(2026, 9, 6, 14, 45, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 6, 15, 45, tzinfo=timezone.utc),
+        booked_by="patron_x", booking_type=BookingType.WALK_IN,
+    ))
+    tool_fn(library_id="lib_demo", action="evaluate", conflicting_booking_ids=["b_3tie_x", "b_3tie_y", "b_3tie_z"])
+    # Commit with valid approval token
+    result = tool_fn(
+        library_id="lib_demo", action="commit",
+        conflicting_booking_ids=["b_3tie_x", "b_3tie_y", "b_3tie_z"],
+        chosen_resolution_booking_id="b_3tie_y", rationale="Yields per RBP-1.",
+        approval_token={"token": "tok_3tie", "approver_role": "librarian_case_review", "related_action_id": "room_conflict:b_3tie_x:b_3tie_y:b_3tie_z"},
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "committed"
