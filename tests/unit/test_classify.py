@@ -30,6 +30,8 @@ def test_room_conflict_is_red_with_any_flag():
         ("policy_exception", [], Tier.RED),
         ("none", [SensitivityFlag.RARE_OR_SPECIAL_COLLECTIONS], Tier.RED),
         ("multiple_editions", [SensitivityFlag.POLICY_EXCEPTION_REQUIRED], Tier.RED),
+        ("none", [SensitivityFlag.MINOR_ACCOUNT], Tier.RED),
+        ("none", [SensitivityFlag.HARDSHIP_PATTERN], Tier.RED),
     ],
 )
 def test_ill_routing_classification_table(ambiguity, flags, expected):
@@ -50,10 +52,18 @@ def test_ill_routing_rejects_unknown_ambiguity_value():
         ("collections_referral", [], False, Tier.RED),
         ("informational", [SensitivityFlag.HARDSHIP_PATTERN], False, Tier.RED),
         ("informational", [], True, Tier.RED),
+        ("fee_mention", [], True, Tier.RED),
+        ("hold_block", [], True, Tier.RED),
+        ("collections_referral", [], True, Tier.RED),
     ],
 )
 def test_overdue_chase_classification_table(tier_consequence, flags, recalled_hardship, expected):
     assert classify_overdue_chase(tier_consequence, flags, recalled_hardship) is expected
+
+
+def test_overdue_chase_rejects_unknown_tier_consequence_value():
+    with pytest.raises(ValueError):
+        classify_overdue_chase("not_a_real_value", [], False)
 
 
 def test_green_requires_no_approval():
@@ -70,6 +80,9 @@ def test_yellow_requires_a_workflow_specific_allowed_role():
     assert is_approval_valid(Tier.YELLOW, "ill_coordinator", Workflow.ILL_ROUTING) is True
     assert is_approval_valid(Tier.YELLOW, "circulation_staff", Workflow.ILL_ROUTING) is False
     assert is_approval_valid(Tier.YELLOW, "circulation_staff", Workflow.OVERDUE_CHASE) is True
+    assert is_approval_valid(Tier.YELLOW, "branch_manager", Workflow.ILL_ROUTING) is True
+    assert is_approval_valid(Tier.YELLOW, "branch_manager", Workflow.OVERDUE_CHASE) is True
+    assert is_approval_valid(Tier.YELLOW, "circulation_staff", Workflow.ROOM_BOOKING) is False
 
 
 def test_evaluation_cache_put_and_get():

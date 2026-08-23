@@ -51,9 +51,10 @@ def classify_ill_routing(ambiguity: str, sensitivity_flags: list[SensitivityFlag
     """ILL routing classification, Plan 1 scope (no specialist yet).
 
     Per tool_architecture.md section 3.3's Authorization boundary: any
-    POLICY_EXCEPTION_REQUIRED or RARE_OR_SPECIAL_COLLECTIONS flag, or
-    ambiguity == "policy_exception", is RED regardless of ambiguity
-    outcome. ambiguity == "none" is GREEN. ambiguity == "multiple_editions"
+    sensitivity flag is RED (consistent with the fail-closed default in
+    classify_room_conflict and classify_overdue_chase). Additionally,
+    ambiguity == "policy_exception" is RED regardless of flags. ambiguity
+    == "none" is GREEN (when no flags present). ambiguity == "multiple_editions"
     is YELLOW at Plan 1 scope -- the ILL Disambiguation Specialist that
     could resolve this to GREEN via confident convergence is a later plan
     (agent_architecture.md section 4.3).
@@ -65,9 +66,7 @@ def classify_ill_routing(ambiguity: str, sensitivity_flags: list[SensitivityFlag
     agent_architecture.md's full classification table before wiring the
     specialist in a later plan.
     """
-    if SensitivityFlag.POLICY_EXCEPTION_REQUIRED in sensitivity_flags:
-        return Tier.RED
-    if SensitivityFlag.RARE_OR_SPECIAL_COLLECTIONS in sensitivity_flags:
+    if sensitivity_flags:
         return Tier.RED
     if ambiguity == "policy_exception":
         return Tier.RED
