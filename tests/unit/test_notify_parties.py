@@ -5,18 +5,19 @@ from stacks.hitl.tier_ledger import TierLedger
 from stacks.tools.notify_parties import NotificationSink, make_notify_parties
 
 
-def _build():
+def _build(session_library_id="lib_demo"):
     repo = InMemoryLibraryDataRepository()
     seed_demo_library(repo, library_id="lib_demo")
+    seed_demo_library(repo, library_id="lib_other")
     sink = NotificationSink()
     tier_ledger = TierLedger()
-    tool_fn = make_notify_parties(repo, sink, tier_ledger)
+    tool_fn = make_notify_parties(repo, sink, tier_ledger, session_library_id)
     return tool_fn, repo, sink, tier_ledger
 
 
 def test_green_action_sends_without_approval_token():
     tool_fn, _, sink, tier_ledger = _build()
-    tier_ledger.record("room_conflict:b_oneoff_a:b_recurring_a", Tier.GREEN, Workflow.ROOM_BOOKING)
+    tier_ledger.record("lib_demo", "room_conflict:b_oneoff_a:b_recurring_a", Tier.GREEN, Workflow.ROOM_BOOKING)
     result = tool_fn(library_id="lib_demo", related_action_id="room_conflict:b_oneoff_a:b_recurring_a", subject="Booking update", body="Your booking has changed.")
     body = result["content"][0]["json"]
     assert body["status"] == "sent"
@@ -26,7 +27,7 @@ def test_green_action_sends_without_approval_token():
 
 def test_yellow_action_requires_valid_approval_token():
     tool_fn, _, _, tier_ledger = _build()
-    tier_ledger.record("ill_request:ill_ambiguous", Tier.YELLOW, Workflow.ILL_ROUTING)
+    tier_ledger.record("lib_demo", "ill_request:ill_ambiguous", Tier.YELLOW, Workflow.ILL_ROUTING)
     blocked = tool_fn(library_id="lib_demo", related_action_id="ill_request:ill_ambiguous", subject="ILL update", body="Your request is being reviewed.")
     assert blocked["content"][0]["json"]["status"] == "blocked_missing_approval"
 
@@ -55,9 +56,105 @@ def test_related_action_with_no_recorded_tier_is_blocked():
 
 def test_guardrail_check_blocks_flagged_content():
     tool_fn, _, sink, tier_ledger = _build()
-    tier_ledger.record("overdue:circ_green", Tier.GREEN, Workflow.OVERDUE_CHASE)
+    tier_ledger.record("lib_demo", "overdue:circ_green", Tier.GREEN, Workflow.OVERDUE_CHASE)
     result = tool_fn(library_id="lib_demo", related_action_id="overdue:circ_green", subject="Reminder", body="Please provide your Social Security Number to confirm.")
     body = result["content"][0]["json"]
     assert body["status"] == "blocked_by_guardrail"
     assert body["guardrail_findings"]
+    assert sink.all() == []
+
+
+def test_cross_tenant_denial():
+    """Calling with a library_id different from session_library_id returns cross_tenant_denied."""
+    tool_fn, _, _, tier_ledger = _build(session_library_id="lib_demo")
+    tier_ledger.record("lib_demo", "room_conflict:b_oneoff_a:b_recurring_a", Tier.GREEN, Workflow.ROOM_BOOKING)
+    result = tool_fn(library_id="lib_other", related_action_id="room_conflict:b_oneoff_a:b_recurring_a", subject="x", body="y")
+    assert result["status"] == "error"
+    assert result["content"][0]["text"] == "cross_tenant_denied"
+
+
+def test_tier_ledger_cross_tenant_isolation():
+    """Record a tier for lib_a under some related_action_id, then call notify_parties
+    with lib_b and the same related_action_id -- it must NOT find lib_a's tier."""
+    tool_fn, _, _, tier_ledger = _build(session_library_id="lib_demo")
+    # Record a tier for lib_other
+    tier_ledger.record("lib_other", "room_conflict:b_oneoff_a:b_recurring_a", Tier.GREEN, Workflow.ROOM_BOOKING)
+    # Try to call with lib_demo (different library) - should not find the tier
+    result = tool_fn(library_id="lib_demo", related_action_id="room_conflict:b_oneoff_a:b_recurring_a", subject="x", body="y")
+    assert result["content"][0]["json"]["status"] == "blocked_missing_approval"
+
+
+def test_token_mismatch_related_action_id():
+    """A token whose related_action_id doesn't match is rejected."""
+    tool_fn, _, _, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "ill_request:ill_ambiguous", Tier.YELLOW, Workflow.ILL_ROUTING)
+    result = tool_fn(
+        library_id="lib_demo",
+        related_action_id="ill_request:ill_ambiguous",
+        subject="x",
+        body="y",
+        approval_token={"token": "t", "approver_role": "ill_coordinator", "related_action_id": "ill_request:different_id"},
+    )
+    assert result["content"][0]["json"]["status"] == "blocked_unauthorized_recipient"
+
+
+def test_red_tier_requires_exact_approver_role():
+    """RED tier requires the exact approver role - a wrong role is rejected."""
+    tool_fn, _, _, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "room_conflict:b_oneoff_a:b_recurring_a", Tier.RED, Workflow.ROOM_BOOKING)
+    # Try with wrong role (branch_manager instead of librarian_case_review)
+    result = tool_fn(
+        library_id="lib_demo",
+        related_action_id="room_conflict:b_oneoff_a:b_recurring_a",
+        subject="x",
+        body="y",
+        approval_token={"token": "t", "approver_role": "branch_manager", "related_action_id": "room_conflict:b_oneoff_a:b_recurring_a"},
+    )
+    assert result["content"][0]["json"]["status"] == "blocked_missing_approval"
+
+
+def test_malformed_approval_token_does_not_raise():
+    """A malformed approval_token dict does not raise - it's treated as no token."""
+    tool_fn, _, _, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "ill_request:ill_ambiguous", Tier.YELLOW, Workflow.ILL_ROUTING)
+    # Pass a malformed token (missing required fields)
+    result = tool_fn(
+        library_id="lib_demo",
+        related_action_id="ill_request:ill_ambiguous",
+        subject="x",
+        body="y",
+        approval_token={"incomplete": "token"},
+    )
+    # Should be blocked_missing_approval (no valid token), not raise
+    assert result["content"][0]["json"]["status"] == "blocked_missing_approval"
+
+
+def test_guardrail_blocks_flagged_subject():
+    """A clean body with a flagged subject (e.g. SSN request) is blocked by guardrail."""
+    tool_fn, _, sink, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "overdue:circ_green", Tier.GREEN, Workflow.OVERDUE_CHASE)
+    result = tool_fn(
+        library_id="lib_demo",
+        related_action_id="overdue:circ_green",
+        subject="Please send your Social Security Number",
+        body="Normal reminder text",
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "blocked_by_guardrail"
+    assert body["guardrail_findings"]
+    assert sink.all() == []
+
+
+def test_room_conflict_with_missing_booking_fails_closed():
+    """A room-conflict related_action_id where one of the two bookings can't be found
+    returns blocked_unauthorized_recipient, not a partial send."""
+    tool_fn, _, sink, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "room_conflict:b_oneoff_a:nonexistent", Tier.GREEN, Workflow.ROOM_BOOKING)
+    result = tool_fn(
+        library_id="lib_demo",
+        related_action_id="room_conflict:b_oneoff_a:nonexistent",
+        subject="x",
+        body="y",
+    )
+    assert result["content"][0]["json"]["status"] == "blocked_unauthorized_recipient"
     assert sink.all() == []

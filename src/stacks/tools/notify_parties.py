@@ -31,7 +31,7 @@ class NotificationSink:
         return list(self._sent)
 
 
-def make_notify_parties(repo: LibraryDataRepository, sink: NotificationSink, tier_ledger: TierLedger):
+def make_notify_parties(repo: LibraryDataRepository, sink: NotificationSink, tier_ledger: TierLedger, session_library_id: str):
     @tool
     def notify_parties(
         library_id: str,
@@ -56,16 +56,27 @@ def make_notify_parties(repo: LibraryDataRepository, sink: NotificationSink, tie
             A result with status "sent", "blocked_by_guardrail",
             "blocked_missing_approval", or "blocked_unauthorized_recipient".
         """
-        findings = _guardrail_check(body)
+        # Cross-tenant denial check (first gate)
+        if library_id != session_library_id:
+            return {"status": "error", "content": [{"text": "cross_tenant_denied"}]}
+
+        findings = _guardrail_check(subject, body)
         if findings:
             return {"status": "success", "content": [{"json": {"notification_id": None, "status": "blocked_by_guardrail", "guardrail_findings": findings}}]}
 
-        tier_entry = tier_ledger.get(related_action_id)
+        tier_entry = tier_ledger.get(library_id, related_action_id)
         if tier_entry is None:
             return {"status": "success", "content": [{"json": {"notification_id": None, "status": "blocked_missing_approval", "guardrail_findings": None}}]}
         tier, workflow = tier_entry
 
-        token = ApprovalToken(**approval_token) if approval_token else None
+        token = None
+        if approval_token:
+            try:
+                token = ApprovalToken(**approval_token)
+            except Exception:
+                # Malformed token: treat as no token supplied
+                token = None
+
         if token is not None and token.related_action_id != related_action_id:
             return {"status": "success", "content": [{"json": {"notification_id": None, "status": "blocked_unauthorized_recipient", "guardrail_findings": None}}]}
         if not is_approval_valid(tier, token.approver_role if token else None, workflow):
@@ -81,14 +92,14 @@ def make_notify_parties(repo: LibraryDataRepository, sink: NotificationSink, tie
     return notify_parties
 
 
-def _guardrail_check(body: str) -> list[str]:
+def _guardrail_check(subject: str, body: str) -> list[str]:
     """Plan 1 stand-in for Bedrock Guardrails -- a fixed denylist a real
     Guardrail policy would also block. Replaced by a real ApplyGuardrail
     call in the AWS-infrastructure follow-on task; the call site
     (unconditional, before every send) does not change.
     """
-    lowered = body.lower()
-    return [f"blocked_pattern: {p}" for p in _GUARDRAIL_DENYLIST if p in lowered]
+    combined = f"{subject}\n{body}".lower()
+    return [f"blocked_pattern: {p}" for p in _GUARDRAIL_DENYLIST if p in combined]
 
 
 def _derive_recipients(repo: LibraryDataRepository, library_id: str, related_action_id: str) -> list[str]:
@@ -99,7 +110,12 @@ def _derive_recipients(repo: LibraryDataRepository, library_id: str, related_act
     if kind == "room_conflict":
         booking_ids = case_id.split(":")
         bookings = [repo.get_booking(library_id, bid) for bid in booking_ids]
-        return [b.booked_by for b in bookings if b is not None]
+        # Fail closed if any booking is None (don't silently drop)
+        if any(b is None for b in bookings):
+            return []
+        recipients = [b.booked_by for b in bookings]
+        # Deduplicate while preserving order
+        return list(dict.fromkeys(recipients))
     if kind == "ill_request":
         request = repo.get_ill_request(library_id, case_id)
         return [request.requester_patron_id] if request is not None else []

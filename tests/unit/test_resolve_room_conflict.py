@@ -62,7 +62,7 @@ def test_green_commit_succeeds_without_approval_token():
     body = result["content"][0]["json"]
     assert body["status"] == "committed"
     assert body["calendar_write"]["yielding_booking_id"] == "b_oneoff_a"
-    assert tier_ledger.get("room_conflict:b_oneoff_a:b_recurring_a") == (Tier.GREEN, Workflow.ROOM_BOOKING)
+    assert tier_ledger.get("lib_demo", "room_conflict:b_oneoff_a:b_recurring_a") == (Tier.GREEN, Workflow.ROOM_BOOKING)
 
 
 def test_red_commit_blocked_without_approval_token():

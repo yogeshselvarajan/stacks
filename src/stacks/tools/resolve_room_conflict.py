@@ -105,7 +105,7 @@ def make_resolve_room_conflict(
             related_action_id = f"room_conflict:{conflict_id}"
 
             # Check if already committed
-            if tier_ledger.get(related_action_id) is not None:
+            if tier_ledger.get(library_id, related_action_id) is not None:
                 return {"status": "success", "content": [{"json": {"conflict_id": conflict_id, "status": "already_committed", "calendar_write": None}}]}
 
             # Parse and validate approval token (with fallback for malformed)
@@ -130,7 +130,7 @@ def make_resolve_room_conflict(
             yielding_booking = next(b for b in bookings if b.booking_id == chosen_resolution_booking_id)
             repo.save_booking(_apply_yield(yielding_booking))
 
-            tier_ledger.record(related_action_id, tier, Workflow.ROOM_BOOKING)
+            tier_ledger.record(library_id, related_action_id, tier, Workflow.ROOM_BOOKING)
             calendar_write = {"conflict_id": conflict_id, "yielding_booking_id": chosen_resolution_booking_id, "related_action_id": related_action_id}
             return {"status": "success", "content": [{"json": {"conflict_id": conflict_id, "status": "committed", "calendar_write": calendar_write}}]}
 

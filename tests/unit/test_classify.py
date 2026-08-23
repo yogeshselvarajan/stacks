@@ -94,6 +94,6 @@ def test_evaluation_cache_put_and_get():
 
 def test_tier_ledger_record_and_get():
     ledger = TierLedger()
-    assert ledger.get("room_conflict:b1:b2") is None
-    ledger.record("room_conflict:b1:b2", Tier.RED, Workflow.ROOM_BOOKING)
-    assert ledger.get("room_conflict:b1:b2") == (Tier.RED, Workflow.ROOM_BOOKING)
+    assert ledger.get("lib_demo", "room_conflict:b1:b2") is None
+    ledger.record("lib_demo", "room_conflict:b1:b2", Tier.RED, Workflow.ROOM_BOOKING)
+    assert ledger.get("lib_demo", "room_conflict:b1:b2") == (Tier.RED, Workflow.ROOM_BOOKING)

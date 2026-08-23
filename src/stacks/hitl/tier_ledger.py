@@ -10,10 +10,10 @@ from stacks.hitl.classify import Tier, Workflow
 
 class TierLedger:
     def __init__(self) -> None:
-        self._by_action_id: dict[str, tuple[Tier, Workflow]] = {}
+        self._by_action_id: dict[tuple[str, str], tuple[Tier, Workflow]] = {}
 
-    def record(self, related_action_id: str, tier: Tier, workflow: Workflow) -> None:
-        self._by_action_id[related_action_id] = (tier, workflow)
+    def record(self, library_id: str, related_action_id: str, tier: Tier, workflow: Workflow) -> None:
+        self._by_action_id[(library_id, related_action_id)] = (tier, workflow)
 
-    def get(self, related_action_id: str) -> tuple[Tier, Workflow] | None:
-        return self._by_action_id.get(related_action_id)
+    def get(self, library_id: str, related_action_id: str) -> tuple[Tier, Workflow] | None:
+        return self._by_action_id.get((library_id, related_action_id))
