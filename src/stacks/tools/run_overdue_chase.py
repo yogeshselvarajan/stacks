@@ -10,6 +10,7 @@ tool_architecture.md section 3.4.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 
 from strands import tool
@@ -128,7 +129,7 @@ def make_run_overdue_chase(
                 for tier_index in range(recommended_tier_index + 1, len(_ESCALATION_LADDER)):
                     if tier_index in _SEVERITY_SIGNALS:
                         for keyword in _SEVERITY_SIGNALS[tier_index]:
-                            if keyword in message_lower:
+                            if re.search(r"\b" + re.escape(keyword) + r"\b", message_lower):
                                 return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None}}]}
 
             record.prior_reminder_tier_sent = max(record.prior_reminder_tier_sent, evaluation["recommended_next_tier"])

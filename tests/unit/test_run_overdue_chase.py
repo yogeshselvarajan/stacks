@@ -162,3 +162,17 @@ def test_message_body_higher_tier_keyword_blocked():
         message_body="Your account has been suspended per OD-1.",
     )
     assert result["content"][0]["json"]["status"] == "blocked_missing_approval"
+
+
+def test_severity_check_uses_word_boundaries_not_substrings():
+    """Ordinary words that merely contain a severity keyword as a substring
+    -- "define" contains "fine", "household" and "threshold" both contain
+    "hold" -- must not trip the guard. Only the standalone keyword itself
+    should match."""
+    tool_fn, _, _ = _build()
+    tool_fn(library_id="lib_demo", circulation_record_id="circ_green", action="evaluate")
+    result = tool_fn(
+        library_id="lib_demo", circulation_record_id="circ_green", action="commit",
+        message_body="Please define your household threshold per OD-1.",
+    )
+    assert result["content"][0]["json"]["status"] == "committed"
