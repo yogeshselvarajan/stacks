@@ -62,7 +62,7 @@ class AuditLogHook(HookProvider):
     Fail-closed behavior: If the audit write itself fails, this hook rewrites
     the tool's reported outcome to an error so neither the model nor the
     caller treats the action as recorded. This does not roll back a mutation
-    the tool already performed — AfterToolCallEvent fires after the tool has
+    the tool already performed. AfterToolCallEvent fires after the tool has
     returned, so no hook on this event can undo a repository write that
     already landed. A genuinely transactional fail-closed audit would require
     the write to happen inside each tool's own commit path; that is out of

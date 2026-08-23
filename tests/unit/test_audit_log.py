@@ -1,4 +1,3 @@
-import logging
 from unittest import mock
 
 from stacks.hooks.audit_log import AuditLogHook, AuditLogSink
