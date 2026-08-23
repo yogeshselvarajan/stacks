@@ -38,7 +38,7 @@ class _FakeEvent:
 
 def _hook_with_room_conflict_cached(sensitivity_flags):
     cache = EvaluationCache()
-    cache.put("b1:b2", {
+    cache.put("lib_demo", "b1:b2", {
         "conflict_id": "b1:b2",
         "sensitivity_flags": [f.value for f in sensitivity_flags],
         "applicable_policy_clause": {"policy_name": "room_booking_priority", "clause_id": "RBP-1", "clause_text": "..."},
@@ -51,7 +51,7 @@ def _hook_with_room_conflict_cached(sensitivity_flags):
 
 def _hook_with_ill_cached(ambiguity, sensitivity_flags):
     cache = EvaluationCache()
-    cache.put("ill_req_123", {
+    cache.put("lib_demo", "ill_req_123", {
         "ill_request_id": "ill_req_123",
         "ambiguity": ambiguity,
         "sensitivity_flags": [f.value for f in sensitivity_flags],
@@ -64,7 +64,7 @@ def _hook_with_ill_cached(ambiguity, sensitivity_flags):
 
 def test_green_case_never_calls_interrupt():
     hook = _hook_with_room_conflict_cached([])
-    event = _FakeEvent("resolve_room_conflict", {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
+    event = _FakeEvent("resolve_room_conflict", {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
     hook._gate(event)
     assert event.interrupt_calls == []
     assert event.cancel_tool is False
@@ -72,7 +72,7 @@ def test_green_case_never_calls_interrupt():
 
 def test_red_case_without_approval_raises_interrupt_and_cancels_on_no_response():
     hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
-    event = _FakeEvent("resolve_room_conflict", {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
+    event = _FakeEvent("resolve_room_conflict", {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
     with pytest.raises(InterruptException):
         hook._gate(event)
     assert len(event.interrupt_calls) == 1
@@ -84,6 +84,7 @@ def test_red_case_with_valid_prior_approval_never_interrupts():
     event = _FakeEvent(
         "resolve_room_conflict",
         {
+            "library_id": "lib_demo",
             "action": "commit",
             "conflicting_booking_ids": ["b1", "b2"],
             "approval_token": {"token": "t", "approver_role": "librarian_case_review", "related_action_id": "room_conflict:b1:b2"},
@@ -96,7 +97,7 @@ def test_red_case_with_valid_prior_approval_never_interrupts():
 
 def test_yellow_case_with_ill_routing():
     hook = _hook_with_ill_cached("multiple_editions", [])
-    event = _FakeEvent("route_ill_request", {"action": "commit", "ill_request_id": "ill_req_123"})
+    event = _FakeEvent("route_ill_request", {"library_id": "lib_demo", "action": "commit", "ill_request_id": "ill_req_123"})
     with pytest.raises(InterruptException):
         hook._gate(event)
     assert len(event.interrupt_calls) == 1
@@ -107,7 +108,7 @@ def test_red_case_approved_resume_sets_approval_token():
     hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
     event = _FakeEvent(
         "resolve_room_conflict",
-        {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
+        {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
         interrupt_response={"approved": True, "approver_role": "librarian_case_review"}
     )
     hook._gate(event)
@@ -120,7 +121,7 @@ def test_red_case_denied_resume_cancels():
     hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
     event = _FakeEvent(
         "resolve_room_conflict",
-        {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
+        {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
         interrupt_response={"approved": False}
     )
     hook._gate(event)
@@ -132,6 +133,7 @@ def test_red_case_with_wrong_role_prior_token_falls_through_to_interrupt():
     event = _FakeEvent(
         "resolve_room_conflict",
         {
+            "library_id": "lib_demo",
             "action": "commit",
             "conflicting_booking_ids": ["b1", "b2"],
             "approval_token": {"token": "t", "approver_role": "branch_manager", "related_action_id": "room_conflict:b1:b2"},
@@ -148,6 +150,7 @@ def test_red_case_with_cross_case_token_falls_through_to_interrupt():
     event = _FakeEvent(
         "resolve_room_conflict",
         {
+            "library_id": "lib_demo",
             "action": "commit",
             "conflicting_booking_ids": ["b1", "b2"],
             "approval_token": {"token": "t", "approver_role": "librarian_case_review", "related_action_id": "room_conflict:different:case"},
@@ -161,7 +164,7 @@ def test_red_case_with_cross_case_token_falls_through_to_interrupt():
 
 def test_cache_miss_cancels_without_interrupting():
     hook = _hook_with_room_conflict_cached([])
-    event = _FakeEvent("resolve_room_conflict", {"action": "commit", "conflicting_booking_ids": ["c1", "c2"]})
+    event = _FakeEvent("resolve_room_conflict", {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["c1", "c2"]})
     hook._gate(event)
     assert event.interrupt_calls == []
     assert event.cancel_tool == "blocked_missing_evaluation"

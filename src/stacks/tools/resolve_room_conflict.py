@@ -82,11 +82,11 @@ def make_resolve_room_conflict(
                 "sensitivity_flags": [f.value for f in sensitivity_flags],
                 "tie": len(candidates) >= 2,
             }
-            cache.put(conflict_id, evaluation)
+            cache.put(library_id, conflict_id, evaluation)
             return {"status": "success", "content": [{"json": evaluation}]}
 
         if action == "commit":
-            evaluation = cache.get(conflict_id)
+            evaluation = cache.get(library_id, conflict_id)
             if evaluation is None:
                 return {"status": "error", "content": [{"text": "evaluate_not_called: commit requires a preceding evaluate for this conflict_id"}]}
 

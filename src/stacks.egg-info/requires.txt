@@ -1,0 +1,5 @@
+pydantic>=2.7
+strands-agents
+
+[dev]
+pytest>=8

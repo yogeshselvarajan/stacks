@@ -15,10 +15,10 @@ from typing import Any
 
 class EvaluationCache:
     def __init__(self) -> None:
-        self._by_case_id: dict[str, dict[str, Any]] = {}
+        self._by_case: dict[tuple[str, str], dict[str, Any]] = {}
 
-    def put(self, case_id: str, evaluation: dict[str, Any]) -> None:
-        self._by_case_id[case_id] = evaluation
+    def put(self, library_id: str, case_id: str, evaluation: dict[str, Any]) -> None:
+        self._by_case[(library_id, case_id)] = evaluation
 
-    def get(self, case_id: str) -> dict[str, Any] | None:
-        return self._by_case_id.get(case_id)
+    def get(self, library_id: str, case_id: str) -> dict[str, Any] | None:
+        return self._by_case.get((library_id, case_id))

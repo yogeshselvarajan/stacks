@@ -87,9 +87,9 @@ def test_yellow_requires_a_workflow_specific_allowed_role():
 
 def test_evaluation_cache_put_and_get():
     cache = EvaluationCache()
-    assert cache.get("case_1") is None
-    cache.put("case_1", {"foo": "bar"})
-    assert cache.get("case_1") == {"foo": "bar"}
+    assert cache.get("lib_demo", "case_1") is None
+    cache.put("lib_demo", "case_1", {"foo": "bar"})
+    assert cache.get("lib_demo", "case_1") == {"foo": "bar"}
 
 
 def test_tier_ledger_record_and_get():

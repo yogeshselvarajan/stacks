@@ -111,23 +111,27 @@ def test_no_match_recorded_path():
 
 
 def test_policy_exception_red_flag_requires_approval():
+    """Test that a flagged request with NO catalog candidates returns
+    policy_exception ambiguity (not no_match) — verifies flag check
+    happens before no-candidates check."""
     from stacks.data.models import ILLRequestRecord
     from stacks.types import SensitivityFlag
     tool_fn, repo, _ = _build()
-    # Create a flagged request
+    # Create a flagged request for a title NOT in the catalog
     flagged_request = ILLRequestRecord(
-        ill_request_id="ill_flagged", library_id="lib_demo",
-        requested_title="The Structure of Scientific Revolutions",
+        ill_request_id="ill_flagged_no_candidates", library_id="lib_demo",
+        requested_title="Rare Untitled Manuscript 1923",
         requester_patron_id="patron_ill_flagged",
         flags=[SensitivityFlag.POLICY_EXCEPTION_REQUIRED],
     )
     repo.save_ill_request(flagged_request)
-    # Evaluate should show policy_exception ambiguity
-    result = tool_fn(library_id="lib_demo", ill_request_id="ill_flagged", action="evaluate")
+    # Evaluate should show policy_exception ambiguity (not no_match)
+    # This is the crucial test: the flag check must come before the no-candidates check
+    result = tool_fn(library_id="lib_demo", ill_request_id="ill_flagged_no_candidates", action="evaluate")
     body = result["content"][0]["json"]
-    assert body["ambiguity"] == "policy_exception"
+    assert body["ambiguity"] == "policy_exception", f"Expected policy_exception but got {body['ambiguity']}"
     # Commit without approval should be blocked (even with proper rationale)
-    result = tool_fn(library_id="lib_demo", ill_request_id="ill_flagged", action="commit", chosen_holding_id=None, rationale="Policy exception per ILL-1.")
+    result = tool_fn(library_id="lib_demo", ill_request_id="ill_flagged_no_candidates", action="commit", chosen_holding_id=None, rationale="Policy exception per ILL-1.")
     assert result["content"][0]["json"]["status"] == "blocked_missing_approval"
 
 

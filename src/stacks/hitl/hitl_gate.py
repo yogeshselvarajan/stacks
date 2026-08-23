@@ -67,9 +67,10 @@ class HitlGateHook(HookProvider):
             return
 
         try:
+            library_id = tool_input.get("library_id")
             case_id = _case_id_for(workflow, tool_input)
             related_action_id = _related_action_id_for(workflow, case_id)
-            evaluation = self._caches[workflow].get(case_id)
+            evaluation = self._caches[workflow].get(library_id, case_id)
             if evaluation is None:
                 # No preceding evaluate cached -- the gate cannot determine
                 # safety and must not guess. Block the call.

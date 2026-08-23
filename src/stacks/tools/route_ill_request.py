@@ -85,11 +85,11 @@ def make_route_ill_request(
                 "sensitivity_flags": [f.value for f in request.flags],
                 "requester_pattern": None,
             }
-            cache.put(ill_request_id, evaluation)
+            cache.put(library_id, ill_request_id, evaluation)
             return {"status": "success", "content": [{"json": evaluation}]}
 
         if action == "commit":
-            evaluation = cache.get(ill_request_id)
+            evaluation = cache.get(library_id, ill_request_id)
             if evaluation is None:
                 return {"status": "error", "content": [{"text": "evaluate_not_called"}]}
 
