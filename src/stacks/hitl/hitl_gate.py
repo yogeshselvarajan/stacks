@@ -55,7 +55,7 @@ class HitlGateHook(HookProvider):
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeToolCallEvent, self._gate)
 
-    def _gate(self, event) -> None:
+    def _gate(self, event: BeforeToolCallEvent) -> None:
         tool_name = event.tool_use["name"]
         workflow = _GATED_COMMIT_TOOLS.get(tool_name)
         if workflow is None:
@@ -65,26 +65,46 @@ class HitlGateHook(HookProvider):
         if tool_input.get("action") != "commit":
             return
 
-        case_id = _case_id_for(workflow, tool_input)
-        evaluation = self._caches[workflow].get(case_id)
-        if evaluation is None:
-            # No preceding evaluate cached -- the tool's own commit path
-            # rejects this independently (evaluate_not_called); the gate
-            # has nothing to classify, so it does not block here itself.
-            return
+        try:
+            case_id = _case_id_for(workflow, tool_input)
+            related_action_id = _related_action_id_for(workflow, case_id)
+            evaluation = self._caches[workflow].get(case_id)
+            if evaluation is None:
+                # No preceding evaluate cached -- the gate cannot determine
+                # safety and must not guess. Block the call.
+                event.cancel_tool = "blocked_missing_evaluation"
+                return
 
-        tier = _classify_from_evaluation(workflow, evaluation)
-        if tier is Tier.GREEN:
-            return
+            tier = _classify_from_evaluation(workflow, evaluation)
+            if tier is Tier.GREEN:
+                return
 
-        approval_token = tool_input.get("approval_token")
-        approver_role = approval_token.get("approver_role") if approval_token else None
-        if is_approval_valid(tier, approver_role, workflow):
-            return
+            approval_token = tool_input.get("approval_token")
+            approver_role = approval_token.get("approver_role") if approval_token else None
+            token_related_action_id = approval_token.get("related_action_id") if approval_token else None
+            if is_approval_valid(tier, approver_role, workflow) and token_related_action_id == related_action_id:
+                return
 
-        response = event.interrupt(f"hitl:{tool_name}:{case_id}", reason={"tier": tier.value, "tool": tool_name})
-        if response is None:
-            event.cancel_tool = f"blocked_missing_approval: tier={tier.value}"
+            response = event.interrupt(
+                f"hitl:{tool_name}:{case_id}",
+                reason={"tier": tier.value, "tool": tool_name, "workflow": workflow.value, "case_id": case_id},
+            )
+            if not isinstance(response, dict) or not response.get("approved"):
+                event.cancel_tool = f"blocked_missing_approval: tier={tier.value}"
+                return
+
+            resumed_role = response.get("approver_role")
+            if not is_approval_valid(tier, resumed_role, workflow):
+                event.cancel_tool = f"blocked_missing_approval: tier={tier.value}"
+                return
+
+            tool_input["approval_token"] = {
+                "token": response.get("token", f"hitl_resume:{case_id}"),
+                "approver_role": resumed_role,
+                "related_action_id": related_action_id,
+            }
+        except Exception as exc:
+            event.cancel_tool = f"blocked_gate_error: {exc}"
 
 
 def _case_id_for(workflow: Workflow, tool_input: dict[str, Any]) -> str:
@@ -94,6 +114,16 @@ def _case_id_for(workflow: Workflow, tool_input: dict[str, Any]) -> str:
         return tool_input["ill_request_id"]
     if workflow is Workflow.OVERDUE_CHASE:
         return tool_input["circulation_record_id"]
+    raise ValueError(f"unrecognized workflow: {workflow!r}")
+
+
+def _related_action_id_for(workflow: Workflow, case_id: str) -> str:
+    if workflow is Workflow.ROOM_BOOKING:
+        return f"room_conflict:{case_id}"
+    if workflow is Workflow.ILL_ROUTING:
+        return f"ill_request:{case_id}"
+    if workflow is Workflow.OVERDUE_CHASE:
+        return f"overdue:{case_id}"
     raise ValueError(f"unrecognized workflow: {workflow!r}")
 
 

@@ -1,6 +1,6 @@
-from stacks.hitl.classify import Tier, Workflow
 from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.hitl_gate import HitlGateHook
+from stacks.hitl.classify import Workflow
 from stacks.types import SensitivityFlag
 
 
@@ -40,6 +40,19 @@ def _hook_with_room_conflict_cached(sensitivity_flags):
     return hook
 
 
+def _hook_with_ill_cached(ambiguity, sensitivity_flags):
+    cache = EvaluationCache()
+    cache.put("ill_req_123", {
+        "ill_request_id": "ill_req_123",
+        "ambiguity": ambiguity,
+        "sensitivity_flags": [f.value for f in sensitivity_flags],
+        "applicable_policy_clause": {"policy_name": "ill_routing_policy", "clause_id": "IRP-1", "clause_text": "..."},
+        "candidate_routes": [{"destination_library": "library_a", "estimated_wait": 5}],
+    })
+    hook = HitlGateHook(EvaluationCache(), cache, EvaluationCache())
+    return hook
+
+
 def test_green_case_never_calls_interrupt():
     hook = _hook_with_room_conflict_cached([])
     event = _FakeEvent("resolve_room_conflict", {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
@@ -70,6 +83,77 @@ def test_red_case_with_valid_prior_approval_never_interrupts():
     hook._gate(event)
     assert event.interrupt_calls == []
     assert event.cancel_tool is False
+
+
+def test_yellow_case_with_ill_routing():
+    hook = _hook_with_ill_cached("multiple_editions", [])
+    event = _FakeEvent("route_ill_request", {"action": "commit", "ill_request_id": "ill_req_123"})
+    hook._gate(event)
+    assert len(event.interrupt_calls) == 1
+    assert event.interrupt_calls[0][1]["tier"] == "YELLOW"
+    assert event.cancel_tool != False
+
+
+def test_red_case_approved_resume_sets_approval_token():
+    hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
+    event = _FakeEvent(
+        "resolve_room_conflict",
+        {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
+        interrupt_response={"approved": True, "approver_role": "librarian_case_review"}
+    )
+    hook._gate(event)
+    assert event.cancel_tool is False
+    assert event.tool_use["input"]["approval_token"]["approver_role"] == "librarian_case_review"
+    assert event.tool_use["input"]["approval_token"]["related_action_id"] == "room_conflict:b1:b2"
+
+
+def test_red_case_denied_resume_cancels():
+    hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
+    event = _FakeEvent(
+        "resolve_room_conflict",
+        {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
+        interrupt_response={"approved": False}
+    )
+    hook._gate(event)
+    assert event.cancel_tool != False
+
+
+def test_red_case_with_wrong_role_prior_token_falls_through_to_interrupt():
+    hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
+    event = _FakeEvent(
+        "resolve_room_conflict",
+        {
+            "action": "commit",
+            "conflicting_booking_ids": ["b1", "b2"],
+            "approval_token": {"token": "t", "approver_role": "branch_manager", "related_action_id": "room_conflict:b1:b2"},
+        },
+    )
+    hook._gate(event)
+    assert len(event.interrupt_calls) == 1
+    assert event.interrupt_calls[0][1]["tier"] == "RED"
+
+
+def test_red_case_with_cross_case_token_falls_through_to_interrupt():
+    hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
+    event = _FakeEvent(
+        "resolve_room_conflict",
+        {
+            "action": "commit",
+            "conflicting_booking_ids": ["b1", "b2"],
+            "approval_token": {"token": "t", "approver_role": "librarian_case_review", "related_action_id": "room_conflict:different:case"},
+        },
+    )
+    hook._gate(event)
+    assert len(event.interrupt_calls) == 1
+    assert event.interrupt_calls[0][1]["tier"] == "RED"
+
+
+def test_cache_miss_cancels_without_interrupting():
+    hook = _hook_with_room_conflict_cached([])
+    event = _FakeEvent("resolve_room_conflict", {"action": "commit", "conflicting_booking_ids": ["c1", "c2"]})
+    hook._gate(event)
+    assert event.interrupt_calls == []
+    assert event.cancel_tool == "blocked_missing_evaluation"
 
 
 def test_evaluate_calls_are_never_gated():
