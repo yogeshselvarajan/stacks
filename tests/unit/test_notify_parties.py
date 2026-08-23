@@ -145,6 +145,58 @@ def test_guardrail_blocks_flagged_subject():
     assert sink.all() == []
 
 
+def test_green_tier_blocks_collections_threat_body():
+    """A GREEN-tier action (nobody ever reviewed it) with an unapproved
+    collections-threat body must be blocked, not sent -- whole-branch
+    review Important 1."""
+    tool_fn, _, sink, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "overdue:circ_green", Tier.GREEN, Workflow.OVERDUE_CHASE)
+    result = tool_fn(
+        library_id="lib_demo",
+        related_action_id="overdue:circ_green",
+        subject="Overdue reminder",
+        body="Your account will be referred to collections if not resolved.",
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "blocked_by_guardrail"
+    assert body["guardrail_findings"]
+    assert sink.all() == []
+
+
+def test_green_tier_allows_genuinely_informational_content():
+    """A GREEN-tier action with genuinely informational content still
+    sends -- the new elevated-severity check must not over-block."""
+    tool_fn, _, sink, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "overdue:circ_green", Tier.GREEN, Workflow.OVERDUE_CHASE)
+    result = tool_fn(
+        library_id="lib_demo",
+        related_action_id="overdue:circ_green",
+        subject="Friendly reminder",
+        body="Your item is now overdue. Please return it at your earliest convenience.",
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "sent"
+    assert len(sink.all()) == 1
+
+
+def test_red_tier_with_valid_approval_allows_collections_language():
+    """A RED-tier action with a valid approval token still sends even with
+    collections language -- it went through real human approval, so the
+    GREEN-only elevated-severity check must not apply."""
+    tool_fn, _, sink, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "overdue:circ_green", Tier.RED, Workflow.OVERDUE_CHASE)
+    result = tool_fn(
+        library_id="lib_demo",
+        related_action_id="overdue:circ_green",
+        subject="Final notice",
+        body="Your account has been referred to collections per policy OES-3.",
+        approval_token={"token": "t", "approver_role": "librarian_case_review", "related_action_id": "overdue:circ_green"},
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "sent"
+    assert len(sink.all()) == 1
+
+
 def test_room_conflict_with_missing_booking_fails_closed():
     """A room-conflict related_action_id where one of the two bookings can't be found
     returns blocked_unauthorized_recipient, not a partial send."""

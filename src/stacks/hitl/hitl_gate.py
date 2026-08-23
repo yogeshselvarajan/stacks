@@ -78,7 +78,14 @@ class HitlGateHook(HookProvider):
                 return
 
             tier = _classify_from_evaluation(workflow, evaluation)
-            if tier is Tier.GREEN:
+            # A genuinely tied ROOM_BOOKING case requires an approval token
+            # from the tool itself regardless of tier (resolve_room_conflict's
+            # own fix) -- so a tied GREEN case must still fall through to the
+            # interrupt block below, or no human is ever asked and the case
+            # becomes an unresolvable dead end. A non-tied GREEN case still
+            # returns early as before. Whole-branch review Important 5.
+            is_unresolvable_tie = workflow is Workflow.ROOM_BOOKING and evaluation.get("tie")
+            if tier is Tier.GREEN and not is_unresolvable_tie:
                 return
 
             approval_token = tool_input.get("approval_token")

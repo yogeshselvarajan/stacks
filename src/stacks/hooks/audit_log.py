@@ -12,18 +12,20 @@ from typing import Any
 
 from strands.hooks import AfterToolCallEvent, HookProvider, HookRegistry
 
+from stacks.hitl.tier_ledger import TierLedger
 from stacks.types import AuditActor
 
 logger = logging.getLogger(__name__)
 
 _MUTATING_TOOLS = {"resolve_room_conflict", "route_ill_request", "run_overdue_chase", "notify_parties"}
-_SENSITIVE_INPUT_KEYS = {"rationale", "message_body", "body"}
+_SENSITIVE_INPUT_KEYS = {"rationale", "message_body", "body", "subject"}
 
 
 class AuditLogRecord:
     __slots__ = (
         "audit_id", "sequence", "tool_name", "tool_input", "tool_output_status", "outcome",
         "session_id", "library_id", "actor", "actor_identity", "timestamp",
+        "hitl_tier", "notification_id",
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -69,10 +71,17 @@ class AuditLogHook(HookProvider):
     scope for this hook.
     """
 
-    def __init__(self, sink: AuditLogSink, session_id: str, library_id: str) -> None:
+    def __init__(
+        self,
+        sink: AuditLogSink,
+        session_id: str,
+        library_id: str,
+        tier_ledger: TierLedger | None = None,
+    ) -> None:
         self._sink = sink
         self._session_id = session_id
         self._library_id = library_id
+        self._tier_ledger = tier_ledger
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(AfterToolCallEvent, self._record)
@@ -91,6 +100,18 @@ class AuditLogHook(HookProvider):
         actor = AuditActor.HUMAN if (isinstance(approval_token, dict) and approval_token.get("approver_role")) else AuditActor.AGENT
         actor_identity = approval_token.get("approver_role") if isinstance(approval_token, dict) else None
 
+        hitl_tier = None
+        if self._tier_ledger is not None:
+            try:
+                related_action_id = _related_action_id_for_audit(tool_name, tool_input)
+                if related_action_id is not None:
+                    entry = self._tier_ledger.get(self._library_id, related_action_id)
+                    if entry is not None:
+                        hitl_tier = entry[0].value
+            except Exception:
+                logger.exception("hitl_tier_lookup_failed")
+                hitl_tier = None
+
         record = AuditLogRecord(
             audit_id=str(uuid.uuid4()),
             tool_name=tool_name,
@@ -102,6 +123,8 @@ class AuditLogHook(HookProvider):
             actor=actor,
             actor_identity=actor_identity,
             timestamp=datetime.now(timezone.utc).isoformat(),
+            hitl_tier=hitl_tier,
+            notification_id=_extract_notification_id(event.result),
         )
         try:
             self._sink.append(record)
@@ -128,6 +151,44 @@ def _extract_outcome(result: dict[str, Any], fallback_status: str) -> str:
     except (KeyError, IndexError, TypeError):
         pass
     return fallback_status
+
+
+def _extract_notification_id(result: dict[str, Any]) -> str | None:
+    """Extract notify_parties's own notification_id from the nested tool
+    result JSON, mirroring _extract_outcome's defensive shape-checking.
+    None for every other tool's result, which is correct -- whole-branch
+    review Important 3.
+    """
+    try:
+        if (isinstance(result, dict) and "content" in result and
+            isinstance(result["content"], list) and len(result["content"]) > 0 and
+            isinstance(result["content"][0], dict) and "json" in result["content"][0]):
+            inner_json = result["content"][0]["json"]
+            if isinstance(inner_json, dict) and "notification_id" in inner_json:
+                return inner_json["notification_id"]
+    except (KeyError, IndexError, TypeError):
+        pass
+    return None
+
+
+def _related_action_id_for_audit(tool_name: str, tool_input: dict[str, Any]) -> str | None:
+    """Derives the related_action_id per tool, matching the exact same
+    convention HitlGateHook and each tool already use, so the audit hook
+    can look up the tier the action was actually classified at without
+    recomputing classify() a second time.
+    """
+    if tool_name == "resolve_room_conflict":
+        ids = tool_input.get("conflicting_booking_ids")
+        return "room_conflict:" + ":".join(sorted(ids)) if ids else None
+    if tool_name == "route_ill_request":
+        rid = tool_input.get("ill_request_id")
+        return f"ill_request:{rid}" if rid else None
+    if tool_name == "run_overdue_chase":
+        cid = tool_input.get("circulation_record_id")
+        return f"overdue:{cid}" if cid else None
+    if tool_name == "notify_parties":
+        return tool_input.get("related_action_id")
+    return None
 
 
 def _sanitize(tool_input: dict[str, Any]) -> dict[str, Any]:

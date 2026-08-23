@@ -177,6 +177,42 @@ def test_evaluate_calls_are_never_gated():
     assert event.interrupt_calls == []
 
 
+def test_green_tied_room_conflict_still_raises_interrupt():
+    """A genuine tie (two same-priority, unflagged, mutually-overlapping
+    bookings) is GREEN tier by sensitivity_flags alone, but
+    resolve_room_conflict's own commit path requires an approval token for
+    any tie regardless of tier. Without this fix, the gate returned early
+    at GREEN and never raised an interrupt, so no human was ever asked --
+    an unresolvable dead end. Whole-branch review Important 5."""
+    cache = EvaluationCache()
+    cache.put("lib_demo", "b1:b2", {
+        "conflict_id": "b1:b2",
+        "sensitivity_flags": [],
+        "applicable_policy_clause": {"policy_name": "room_booking_priority", "clause_id": "RBP-1", "clause_text": "..."},
+        "candidate_resolutions": [
+            {"booking_id_that_yields": "b1", "booking_id_that_keeps": "b2", "deterministic_score": 0.0, "rule_applied": "RBP-1"},
+            {"booking_id_that_yields": "b2", "booking_id_that_keeps": "b1", "deterministic_score": 0.0, "rule_applied": "RBP-1"},
+        ],
+        "tie": True,
+    })
+    hook = HitlGateHook(cache, EvaluationCache(), EvaluationCache())
+    event = _FakeEvent("resolve_room_conflict", {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
+    with pytest.raises(InterruptException):
+        hook._gate(event)
+    assert len(event.interrupt_calls) == 1
+    assert event.interrupt_calls[0][1]["tier"] == "GREEN"
+
+
+def test_green_non_tied_room_conflict_still_returns_early():
+    """A non-tied GREEN case must still return early without interrupting --
+    the tie-specific fix must not broaden to every GREEN case."""
+    hook = _hook_with_room_conflict_cached([])
+    event = _FakeEvent("resolve_room_conflict", {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
+    hook._gate(event)
+    assert event.interrupt_calls == []
+    assert event.cancel_tool is False
+
+
 def test_unrelated_tool_calls_are_ignored():
     hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
     event = _FakeEvent("get_library_data", {"query_type": "room_calendar"})

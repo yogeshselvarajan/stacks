@@ -80,7 +80,7 @@ def build_stacks_agent(
     notify_parties = make_notify_parties(repo, notification_sink, tier_ledger, library_id)
 
     hitl_gate = HitlGateHook(room_conflict_cache, ill_cache, overdue_cache)
-    audit_log = AuditLogHook(audit_sink, session_id, library_id)
+    audit_log = AuditLogHook(audit_sink, session_id, library_id, tier_ledger=tier_ledger)
 
     model_id = os.environ.get("STACKS_BEDROCK_MODEL_ID")
     if not model_id:

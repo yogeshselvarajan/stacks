@@ -1,5 +1,7 @@
 from unittest import mock
 
+from stacks.hitl.classify import Tier, Workflow
+from stacks.hitl.tier_ledger import TierLedger
 from stacks.hooks.audit_log import AuditLogHook, AuditLogSink
 from stacks.types import AuditActor
 
@@ -238,3 +240,110 @@ def test_audit_log_input_deepcopy_prevents_aliasing():
     # Audit record should have the original list, not the mutated one
     record = sink.all()[0]
     assert record.tool_input["conflicting_booking_ids"] == ["b1", "b2"]
+
+
+def test_hitl_tier_is_captured_for_a_green_room_booking_commit():
+    """A GREEN room-booking commit's audit record has hitl_tier == 'GREEN' --
+    whole-branch review Important 2."""
+    sink = AuditLogSink()
+    tier_ledger = TierLedger()
+    tier_ledger.record("lib_demo", "room_conflict:b1:b2", Tier.GREEN, Workflow.ROOM_BOOKING)
+    hook = AuditLogHook(sink, session_id="sess_1", library_id="lib_demo", tier_ledger=tier_ledger)
+
+    event = _FakeAfterEvent(
+        "resolve_room_conflict",
+        {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
+        {"status": "success", "content": [{"json": {"status": "committed"}}]},
+    )
+    hook._record(event)
+
+    record = sink.all()[0]
+    assert record.hitl_tier == "GREEN"
+
+
+def test_hitl_tier_is_none_when_no_matching_ledger_entry():
+    """A tool call with no matching ledger entry (e.g. a blocked call
+    before any tier was recorded) has hitl_tier is None and does not
+    raise."""
+    sink = AuditLogSink()
+    tier_ledger = TierLedger()
+    hook = AuditLogHook(sink, session_id="sess_1", library_id="lib_demo", tier_ledger=tier_ledger)
+
+    event = _FakeAfterEvent(
+        "resolve_room_conflict",
+        {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
+        {"status": "success", "content": [{"json": {"status": "blocked_missing_approval"}}]},
+    )
+    hook._record(event)
+
+    record = sink.all()[0]
+    assert record.hitl_tier is None
+
+
+def test_hitl_tier_is_none_without_tier_ledger_configured():
+    """When no tier_ledger is passed to AuditLogHook at all, hitl_tier is
+    None and the hook does not raise."""
+    sink = AuditLogSink()
+    hook = AuditLogHook(sink, session_id="sess_1", library_id="lib_demo")
+
+    event = _FakeAfterEvent(
+        "resolve_room_conflict",
+        {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
+        {"status": "success", "content": [{"json": {"status": "committed"}}]},
+    )
+    hook._record(event)
+
+    record = sink.all()[0]
+    assert record.hitl_tier is None
+
+
+def test_notification_id_is_captured_for_a_successful_notify_parties_call():
+    """A successful notify_parties call's audit record captures the real
+    notification_id -- whole-branch review Important 3."""
+    sink = AuditLogSink()
+    hook = AuditLogHook(sink, session_id="sess_1", library_id="lib_demo")
+
+    event = _FakeAfterEvent(
+        "notify_parties",
+        {"related_action_id": "overdue:circ_1", "subject": "Reminder", "body": "Your item is overdue."},
+        {"status": "success", "content": [{"json": {"notification_id": "notif_7", "status": "sent", "guardrail_findings": None}}]},
+    )
+    hook._record(event)
+
+    record = sink.all()[0]
+    assert record.notification_id == "notif_7"
+
+
+def test_notification_id_is_none_for_non_notify_parties_tools():
+    sink = AuditLogSink()
+    hook = AuditLogHook(sink, session_id="sess_1", library_id="lib_demo")
+
+    event = _FakeAfterEvent(
+        "resolve_room_conflict",
+        {"action": "commit", "conflicting_booking_ids": ["b1", "b2"]},
+        {"status": "success", "content": [{"json": {"status": "committed"}}]},
+    )
+    hook._record(event)
+
+    record = sink.all()[0]
+    assert record.notification_id is None
+
+
+def test_subject_is_stripped_from_the_logged_input():
+    """_SENSITIVE_INPUT_KEYS omits 'subject' was the bug -- a notify_parties
+    call's audit record must not contain the raw subject text anywhere in
+    its tool_input. Whole-branch review Important 4."""
+    sink = AuditLogSink()
+    hook = AuditLogHook(sink, session_id="sess_1", library_id="lib_demo")
+
+    event = _FakeAfterEvent(
+        "notify_parties",
+        {"related_action_id": "overdue:circ_1", "subject": "Sensitive subject text should not appear", "body": "Your item is overdue."},
+        {"status": "success", "content": [{"json": {"notification_id": "notif_1", "status": "sent"}}]},
+    )
+    hook._record(event)
+
+    record = sink.all()[0]
+    assert "subject" not in record.tool_input
+    serialized = str(record.to_dict())
+    assert "Sensitive subject text should not appear" not in serialized

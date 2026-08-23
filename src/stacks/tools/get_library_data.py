@@ -63,7 +63,7 @@ def make_get_library_data(repo: LibraryDataRepository, session_library_id: str):
             try:
                 start = datetime.fromisoformat(room_calendar_filter["start"])
                 end = datetime.fromisoformat(room_calendar_filter["end"])
-            except ValueError:
+            except (ValueError, KeyError):
                 return {"status": "error", "content": [{"text": "invalid_filter: start and end must be valid ISO datetime strings"}]}
             if start >= end:
                 return {"status": "error", "content": [{"text": "invalid_filter: start must be before end"}]}

@@ -3,16 +3,23 @@ token-gated. See docs/architecture/tool_architecture.md section 3.5.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from strands import tool
 
 from stacks.data.repository import LibraryDataRepository
-from stacks.hitl.classify import is_approval_valid
+from stacks.hitl.classify import Tier, is_approval_valid
 from stacks.hitl.tier_ledger import TierLedger
 from stacks.types import ApprovalToken
 
 _GUARDRAIL_DENYLIST = ("social security number", "ssn:", "credit card")
+
+_ELEVATED_SEVERITY_KEYWORDS = (
+    "fee", "fine", "charge",
+    "hold", "blocked", "suspended", "restricted",
+    "collections", "collection agency", "legal action", "referred to collections",
+)
 
 
 class NotificationSink:
@@ -69,6 +76,11 @@ def make_notify_parties(repo: LibraryDataRepository, sink: NotificationSink, tie
             return {"status": "success", "content": [{"json": {"notification_id": None, "status": "blocked_missing_approval", "guardrail_findings": None}}]}
         tier, workflow = tier_entry
 
+        if tier is Tier.GREEN:
+            severity_findings = _elevated_severity_check(subject, body)
+            if severity_findings:
+                return {"status": "success", "content": [{"json": {"notification_id": None, "status": "blocked_by_guardrail", "guardrail_findings": severity_findings}}]}
+
         token = None
         if approval_token:
             try:
@@ -100,6 +112,22 @@ def _guardrail_check(subject: str, body: str) -> list[str]:
     """
     combined = f"{subject}\n{body}".lower()
     return [f"blocked_pattern: {p}" for p in _GUARDRAIL_DENYLIST if p in combined]
+
+
+def _elevated_severity_check(subject: str, body: str) -> list[str]:
+    """When the related action's tier is GREEN (no human ever reviewed it),
+    also block elevated-severity language in subject+body -- e.g. a
+    collections-threat body attached to an unreviewed informational
+    overdue notice. Word-boundary matched, reusing run_overdue_chase.py's
+    keyword set and matching pattern (tool_architecture.md section 3.5's
+    Authorization boundary, whole-branch review Important 1).
+    """
+    combined = f"{subject}\n{body}".lower()
+    findings = []
+    for keyword in _ELEVATED_SEVERITY_KEYWORDS:
+        if re.search(r"\b" + re.escape(keyword) + r"\b", combined):
+            findings.append(f"blocked_pattern: {keyword}")
+    return findings
 
 
 def _derive_recipients(repo: LibraryDataRepository, library_id: str, related_action_id: str) -> list[str]:

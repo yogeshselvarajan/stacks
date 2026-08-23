@@ -112,8 +112,8 @@ def test_no_match_recorded_path():
 
 def test_policy_exception_red_flag_requires_approval():
     """Test that a flagged request with NO catalog candidates returns
-    policy_exception ambiguity (not no_match) — verifies flag check
-    happens before no-candidates check."""
+    policy_exception ambiguity (not no_match), verifying the flag check
+    happens before the no-candidates check."""
     from stacks.data.models import ILLRequestRecord
     from stacks.types import SensitivityFlag
     tool_fn, repo, _ = _build()
@@ -187,7 +187,7 @@ def test_cross_tenant_catalog_isolation():
     tier_ledger = TierLedger()
     tool_fn_a = make_route_ill_request(repo, cache, tier_ledger, "lib_a")
 
-    # Evaluate lib_a's request — should only see hold_a
+    # Evaluate lib_a's request, it should only see hold_a
     result = tool_fn_a(library_id="lib_a", ill_request_id="ill_shared_a", action="evaluate")
     candidates = result["content"][0]["json"]["candidate_matches"]
     holding_ids = [c["holding_id"] for c in candidates]

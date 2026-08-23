@@ -20,6 +20,16 @@ def test_room_calendar_query_returns_bookings():
     assert len(bookings) == 2
 
 
+def test_room_calendar_filter_missing_start_and_end_returns_invalid_filter():
+    """A room_calendar_filter with only room_id (no start/end keys at all)
+    must degrade to the invalid_filter error response, not raise a
+    KeyError -- whole-branch review Minor 8."""
+    tool_fn = make_get_library_data(_repo(), "lib_demo")
+    result = tool_fn(library_id="lib_demo", query_type="room_calendar", room_calendar_filter={"room_id": "room_a"})
+    assert result["status"] == "error"
+    assert "invalid_filter" in result["content"][0]["text"]
+
+
 def test_cross_tenant_query_is_denied():
     tool_fn = make_get_library_data(_repo(), "lib_demo")
     result = tool_fn(
