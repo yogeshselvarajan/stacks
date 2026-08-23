@@ -426,3 +426,66 @@ def test_three_booking_tie_commits_with_valid_approval():
     )
     body = result["content"][0]["json"]
     assert body["status"] == "committed"
+
+
+# Third round fixes: Fully-tied conflicts (no self-referential candidates)
+def test_two_fully_tied_bookings_no_self_referential_candidate():
+    tool_fn, repo, _ = _build()
+    # Create 2 bookings with same priority (both WALK_IN)
+    repo.save_booking(BookingRecord(
+        booking_id="b_full_tie_1", library_id="lib_demo", room_id="room_i",
+        start=datetime(2026, 9, 7, 14, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 7, 15, 0, tzinfo=timezone.utc),
+        booked_by="patron_y", booking_type=BookingType.WALK_IN,
+    ))
+    repo.save_booking(BookingRecord(
+        booking_id="b_full_tie_2", library_id="lib_demo", room_id="room_i",
+        start=datetime(2026, 9, 7, 14, 30, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 7, 15, 30, tzinfo=timezone.utc),
+        booked_by="patron_z", booking_type=BookingType.WALK_IN,
+    ))
+    result = tool_fn(library_id="lib_demo", action="evaluate", conflicting_booking_ids=["b_full_tie_1", "b_full_tie_2"])
+    body = result["content"][0]["json"]
+    # Should have 2 candidates (one for each yielding to the other)
+    assert len(body["candidate_resolutions"]) == 2
+    assert body["tie"] is True
+    # Verify no self-referential candidates
+    for candidate in body["candidate_resolutions"]:
+        assert candidate["booking_id_that_yields"] != candidate["booking_id_that_keeps"]
+    # Verify we have both A->B and B->A pairs
+    assert set([body["candidate_resolutions"][0]["booking_id_that_yields"], body["candidate_resolutions"][1]["booking_id_that_yields"]]) == {"b_full_tie_1", "b_full_tie_2"}
+    assert set([body["candidate_resolutions"][0]["booking_id_that_keeps"], body["candidate_resolutions"][1]["booking_id_that_keeps"]]) == {"b_full_tie_1", "b_full_tie_2"}
+
+
+def test_three_fully_tied_bookings_no_self_referential_candidate():
+    tool_fn, repo, _ = _build()
+    # Create 3 bookings with same priority (all WALK_IN)
+    repo.save_booking(BookingRecord(
+        booking_id="b_3full_1", library_id="lib_demo", room_id="room_j",
+        start=datetime(2026, 9, 8, 14, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc),
+        booked_by="patron_aa", booking_type=BookingType.WALK_IN,
+    ))
+    repo.save_booking(BookingRecord(
+        booking_id="b_3full_2", library_id="lib_demo", room_id="room_j",
+        start=datetime(2026, 9, 8, 14, 30, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 8, 15, 30, tzinfo=timezone.utc),
+        booked_by="patron_bb", booking_type=BookingType.WALK_IN,
+    ))
+    repo.save_booking(BookingRecord(
+        booking_id="b_3full_3", library_id="lib_demo", room_id="room_j",
+        start=datetime(2026, 9, 8, 14, 45, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 8, 15, 45, tzinfo=timezone.utc),
+        booked_by="patron_cc", booking_type=BookingType.WALK_IN,
+    ))
+    result = tool_fn(library_id="lib_demo", action="evaluate", conflicting_booking_ids=["b_3full_1", "b_3full_2", "b_3full_3"])
+    body = result["content"][0]["json"]
+    # Should have 3 candidates (one for each yielding to another)
+    assert len(body["candidate_resolutions"]) == 3
+    assert body["tie"] is True
+    # Verify no self-referential candidates
+    for candidate in body["candidate_resolutions"]:
+        assert candidate["booking_id_that_yields"] != candidate["booking_id_that_keeps"]
+    # Verify all 3 bookings appear as yielders
+    yielders = set([c["booking_id_that_yields"] for c in body["candidate_resolutions"]])
+    assert yielders == {"b_3full_1", "b_3full_2", "b_3full_3"}

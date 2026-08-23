@@ -80,7 +80,7 @@ def make_resolve_room_conflict(
                 "applicable_policy_clause": clause.model_dump(mode="json"),
                 "candidate_resolutions": candidates,
                 "sensitivity_flags": [f.value for f in sensitivity_flags],
-                "tie": len(candidates) >= 2 and candidates[0]["deterministic_score"] == candidates[1]["deterministic_score"],
+                "tie": len(candidates) >= 2,
             }
             cache.put(conflict_id, evaluation)
             return {"status": "success", "content": [{"json": evaluation}]}
@@ -149,18 +149,21 @@ def _bookings_overlap(bookings: list[BookingRecord]) -> bool:
 
 def _rank_resolutions(bookings: list[BookingRecord], clause_id: str) -> list[dict[str, Any]]:
     ranked = sorted(bookings, key=lambda b: _PRIORITY[b.booking_type.value], reverse=True)
-    keeper = ranked[0]
-    keeper_priority = _PRIORITY[keeper.booking_type.value]
+    keeper_priority = _PRIORITY[ranked[0].booking_type.value]
 
     # Find minimum priority among all bookings
     min_priority = min(_PRIORITY[b.booking_type.value] for b in bookings)
     # Find all bookings with minimum priority (the potential yielders)
     yielders = [b for b in bookings if _PRIORITY[b.booking_type.value] == min_priority]
 
+    # Compute score once for all candidates
+    score = float(keeper_priority - min_priority)
+
     # Generate a candidate for each yielder
     candidates = []
     for yielder in yielders:
-        score = float(keeper_priority - min_priority)
+        # Pick a keeper that is different from this yielder
+        keeper = next(b for b in ranked if b.booking_id != yielder.booking_id)
         candidates.append({
             "booking_id_that_yields": yielder.booking_id,
             "booking_id_that_keeps": keeper.booking_id,
