@@ -1,0 +1,110 @@
+"""HITL gate hook -- the single BeforeToolCallEvent choke point that runs
+classify() and raises a Strands interrupt for YELLOW/RED cases. See
+docs/architecture/final_architecture.md section 6.2 and
+docs/architecture/tool_architecture.md section 1 ("Single HITL choke point").
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
+
+from stacks.hitl.classify import (
+    Tier,
+    Workflow,
+    classify_ill_routing,
+    classify_overdue_chase,
+    classify_room_conflict,
+    is_approval_valid,
+)
+from stacks.hitl.evaluation_cache import EvaluationCache
+from stacks.types import SensitivityFlag
+
+# Tool names whose "commit" action is HITL-gated, and which workflow
+# applies. notify_parties is deliberately absent -- its own gating is
+# keyed to the tier of the action it's attached to, not gated a second
+# time here (tool_architecture.md section 3.5).
+_GATED_COMMIT_TOOLS: dict[str, Workflow] = {
+    "resolve_room_conflict": Workflow.ROOM_BOOKING,
+    "route_ill_request": Workflow.ILL_ROUTING,
+    "run_overdue_chase": Workflow.OVERDUE_CHASE,
+}
+
+
+class HitlGateHook(HookProvider):
+    """Intercepts every commit-mode call to a gated tool, re-derives its
+    tier from the same EvaluationCache the tool itself populated, and
+    raises a Strands interrupt for YELLOW/RED. Shares its three
+    EvaluationCache instances with agent.py's tool wiring (Task 11) so it
+    is reasoning over the exact same deterministic facts evaluate already
+    computed, never a second independent judgment.
+    """
+
+    def __init__(
+        self,
+        room_conflict_cache: EvaluationCache,
+        ill_cache: EvaluationCache,
+        overdue_cache: EvaluationCache,
+    ) -> None:
+        self._caches: dict[Workflow, EvaluationCache] = {
+            Workflow.ROOM_BOOKING: room_conflict_cache,
+            Workflow.ILL_ROUTING: ill_cache,
+            Workflow.OVERDUE_CHASE: overdue_cache,
+        }
+
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
+        registry.add_callback(BeforeToolCallEvent, self._gate)
+
+    def _gate(self, event) -> None:
+        tool_name = event.tool_use["name"]
+        workflow = _GATED_COMMIT_TOOLS.get(tool_name)
+        if workflow is None:
+            return
+
+        tool_input = event.tool_use["input"]
+        if tool_input.get("action") != "commit":
+            return
+
+        case_id = _case_id_for(workflow, tool_input)
+        evaluation = self._caches[workflow].get(case_id)
+        if evaluation is None:
+            # No preceding evaluate cached -- the tool's own commit path
+            # rejects this independently (evaluate_not_called); the gate
+            # has nothing to classify, so it does not block here itself.
+            return
+
+        tier = _classify_from_evaluation(workflow, evaluation)
+        if tier is Tier.GREEN:
+            return
+
+        approval_token = tool_input.get("approval_token")
+        approver_role = approval_token.get("approver_role") if approval_token else None
+        if is_approval_valid(tier, approver_role, workflow):
+            return
+
+        response = event.interrupt(f"hitl:{tool_name}:{case_id}", reason={"tier": tier.value, "tool": tool_name})
+        if response is None:
+            event.cancel_tool = f"blocked_missing_approval: tier={tier.value}"
+
+
+def _case_id_for(workflow: Workflow, tool_input: dict[str, Any]) -> str:
+    if workflow is Workflow.ROOM_BOOKING:
+        return ":".join(sorted(tool_input["conflicting_booking_ids"]))
+    if workflow is Workflow.ILL_ROUTING:
+        return tool_input["ill_request_id"]
+    if workflow is Workflow.OVERDUE_CHASE:
+        return tool_input["circulation_record_id"]
+    raise ValueError(f"unrecognized workflow: {workflow!r}")
+
+
+def _classify_from_evaluation(workflow: Workflow, evaluation: dict[str, Any]) -> Tier:
+    sensitivity_flags = [SensitivityFlag(f) for f in evaluation["sensitivity_flags"]]
+    if workflow is Workflow.ROOM_BOOKING:
+        return classify_room_conflict(sensitivity_flags)
+    if workflow is Workflow.ILL_ROUTING:
+        return classify_ill_routing(evaluation["ambiguity"], sensitivity_flags)
+    if workflow is Workflow.OVERDUE_CHASE:
+        return classify_overdue_chase(
+            evaluation["tier_consequence"], sensitivity_flags, evaluation.get("has_recalled_hardship_history", False)
+        )
+    raise ValueError(f"unrecognized workflow: {workflow!r}")
