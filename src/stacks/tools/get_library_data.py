@@ -11,6 +11,8 @@ from strands import tool
 
 from stacks.data.repository import LibraryDataRepository
 
+MAX_RESULTS = 50
+
 
 def make_get_library_data(repo: LibraryDataRepository, session_library_id: str):
     """Build the get_library_data tool bound to one repository and one
@@ -58,10 +60,15 @@ def make_get_library_data(repo: LibraryDataRepository, session_library_id: str):
         if query_type == "room_calendar":
             if not room_calendar_filter or "room_id" not in room_calendar_filter:
                 return {"status": "error", "content": [{"text": "invalid_filter: room_calendar_filter requires room_id, start, end"}]}
-            start = datetime.fromisoformat(room_calendar_filter["start"])
-            end = datetime.fromisoformat(room_calendar_filter["end"])
+            try:
+                start = datetime.fromisoformat(room_calendar_filter["start"])
+                end = datetime.fromisoformat(room_calendar_filter["end"])
+            except ValueError:
+                return {"status": "error", "content": [{"text": "invalid_filter: start and end must be valid ISO datetime strings"}]}
+            if start >= end:
+                return {"status": "error", "content": [{"text": "invalid_filter: start must be before end"}]}
             bookings = repo.get_bookings_for_room(library_id, room_calendar_filter["room_id"], start, end)
-            return {"status": "success", "content": [{"json": {"bookings": [b.model_dump(mode="json") for b in bookings]}}]}
+            return {"status": "success", "content": [{"json": {"bookings": [b.model_dump(mode="json") for b in bookings][:MAX_RESULTS]}}]}
 
         if query_type == "ill_queue":
             if not ill_queue_filter or "ill_request_id" not in ill_queue_filter:
@@ -85,7 +92,7 @@ def make_get_library_data(repo: LibraryDataRepository, session_library_id: str):
             clauses = repo.get_policy_clauses(library_id, policy_filter["policy_name"])
             if not clauses:
                 return {"status": "error", "content": [{"text": "not_found: no policy document with that name"}]}
-            return {"status": "success", "content": [{"json": {"clauses": [c.model_dump(mode="json") for c in clauses]}}]}
+            return {"status": "success", "content": [{"json": {"clauses": [c.model_dump(mode="json") for c in clauses][:MAX_RESULTS]}}]}
 
         return {"status": "error", "content": [{"text": f"invalid_query_type: {query_type!r}"}]}
 

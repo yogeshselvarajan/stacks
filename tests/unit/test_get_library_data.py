@@ -54,3 +54,18 @@ def test_invalid_query_type_is_rejected():
     result = tool_fn(library_id="lib_demo", query_type="patron_search")
     assert result["status"] == "error"
     assert "invalid_query_type" in result["content"][0]["text"]
+
+
+def test_circulation_record_query_returns_record():
+    tool_fn = make_get_library_data(_repo(), "lib_demo")
+    result = tool_fn(library_id="lib_demo", query_type="circulation_record", circulation_filter={"circulation_record_id": "circ_green"})
+    assert result["status"] == "success"
+    record = result["content"][0]["json"]["record"]
+    assert record["circulation_record_id"] == "circ_green"
+
+
+def test_circulation_record_query_not_found():
+    tool_fn = make_get_library_data(_repo(), "lib_demo")
+    result = tool_fn(library_id="lib_demo", query_type="circulation_record", circulation_filter={"circulation_record_id": "does_not_exist"})
+    assert result["status"] == "error"
+    assert "not_found" in result["content"][0]["text"]
