@@ -82,8 +82,19 @@ def build_stacks_agent(
     hitl_gate = HitlGateHook(room_conflict_cache, ill_cache, overdue_cache)
     audit_log = AuditLogHook(audit_sink, session_id, library_id)
 
+    model_id = os.environ.get("STACKS_BEDROCK_MODEL_ID")
+    if not model_id:
+        raise RuntimeError(
+            "STACKS_BEDROCK_MODEL_ID environment variable must be set to a real "
+            "Bedrock model ID (e.g. an inference profile ID with a date/version "
+            "suffix). Per docs/architecture/final_architecture.md section 4.2, "
+            "the model ID is never hardcoded -- there is deliberately no guessed "
+            "fallback here, since a wrong guess fails at Bedrock invocation time "
+            "with a confusing ValidationException rather than at startup."
+        )
+
     model = BedrockModel(
-        model_id=os.environ.get("STACKS_BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-4-6"),
+        model_id=model_id,
         region_name=os.environ.get("STACKS_AWS_REGION", "us-west-2"),
         temperature=0.2,
     )
