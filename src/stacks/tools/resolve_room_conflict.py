@@ -54,6 +54,9 @@ def make_resolve_room_conflict(
         if library_id != session_library_id:
             return {"status": "error", "content": [{"text": "cross_tenant_denied"}]}
 
+        if len(set(conflicting_booking_ids)) != len(conflicting_booking_ids):
+            return {"status": "error", "content": [{"text": "invalid_request: duplicate booking ids in conflicting_booking_ids"}]}
+
         conflict_id = ":".join(sorted(conflicting_booking_ids))
         bookings = [repo.get_booking(library_id, bid) for bid in conflicting_booking_ids]
         if any(b is None for b in bookings):
@@ -94,14 +97,36 @@ def make_resolve_room_conflict(
 
             sensitivity_flags = [SensitivityFlag(f) for f in evaluation["sensitivity_flags"]]
             tier = classify_room_conflict(sensitivity_flags)
-            token = ApprovalToken(**approval_token) if approval_token else None
+
+            # Compute related_action_id before approval check
+            related_action_id = f"room_conflict:{conflict_id}"
+
+            # Check if already committed
+            if tier_ledger.get(related_action_id) is not None:
+                return {"status": "success", "content": [{"json": {"conflict_id": conflict_id, "status": "already_committed", "calendar_write": None}}]}
+
+            # Parse and validate approval token (with fallback for malformed)
+            token = None
+            if approval_token:
+                try:
+                    token = ApprovalToken(**approval_token)
+                    # Validate token's related_action_id matches computed one
+                    if token.related_action_id != related_action_id:
+                        return {"status": "success", "content": [{"json": {"conflict_id": conflict_id, "status": "blocked_missing_approval", "calendar_write": None}}]}
+                except Exception:
+                    # Malformed token: treat as no token supplied
+                    token = None
+
+            # Block ties without approval even if GREEN
+            if evaluation["tie"] and token is None:
+                return {"status": "success", "content": [{"json": {"conflict_id": conflict_id, "status": "blocked_missing_approval", "calendar_write": None}}]}
+
             if not is_approval_valid(tier, token.approver_role if token else None, Workflow.ROOM_BOOKING):
                 return {"status": "success", "content": [{"json": {"conflict_id": conflict_id, "status": "blocked_missing_approval", "calendar_write": None}}]}
 
             yielding_booking = next(b for b in bookings if b.booking_id == chosen_resolution_booking_id)
             repo.save_booking(_apply_yield(yielding_booking))
 
-            related_action_id = f"room_conflict:{conflict_id}"
             tier_ledger.record(related_action_id, tier, Workflow.ROOM_BOOKING)
             calendar_write = {"conflict_id": conflict_id, "yielding_booking_id": chosen_resolution_booking_id, "related_action_id": related_action_id}
             return {"status": "success", "content": [{"json": {"conflict_id": conflict_id, "status": "committed", "calendar_write": calendar_write}}]}
@@ -114,21 +139,30 @@ def make_resolve_room_conflict(
 def _bookings_overlap(bookings: list[BookingRecord]) -> bool:
     for i, a in enumerate(bookings):
         for b in bookings[i + 1:]:
-            if a.room_id == b.room_id and a.start < b.end and b.start < a.end:
-                return True
-    return False
+            if not (a.room_id == b.room_id and a.start < b.end and b.start < a.end):
+                return False
+    return True
 
 
 def _rank_resolutions(bookings: list[BookingRecord], clause_id: str) -> list[dict[str, Any]]:
     ranked = sorted(bookings, key=lambda b: _PRIORITY[b.booking_type.value], reverse=True)
     keeper, yielder = ranked[0], ranked[-1]
     score = float(_PRIORITY[keeper.booking_type.value] - _PRIORITY[yielder.booking_type.value])
-    return [{
+    candidates = [{
         "booking_id_that_yields": yielder.booking_id,
         "booking_id_that_keeps": keeper.booking_id,
         "deterministic_score": score,
         "rule_applied": clause_id,
     }]
+    # If there's a tie (equal priority), also return the reverse as a candidate
+    if score == 0.0:
+        candidates.append({
+            "booking_id_that_yields": keeper.booking_id,
+            "booking_id_that_keeps": yielder.booking_id,
+            "deterministic_score": 0.0,
+            "rule_applied": clause_id,
+        })
+    return candidates
 
 
 def _apply_yield(booking: BookingRecord) -> BookingRecord:
