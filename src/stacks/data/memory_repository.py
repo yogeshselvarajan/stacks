@@ -13,7 +13,7 @@ class InMemoryLibraryDataRepository:
     def __init__(self) -> None:
         self._bookings: dict[tuple[str, str], BookingRecord] = {}
         self._ill_requests: dict[tuple[str, str], ILLRequestRecord] = {}
-        self._catalog: dict[str, list[CatalogCandidate]] = {}
+        self._catalog: dict[tuple[str, str], list[CatalogCandidate]] = {}
         self._circulation_records: dict[tuple[str, str], CirculationRecord] = {}
         self._policy_clauses: dict[tuple[str, str], list[PolicyClauseRef]] = {}
 
@@ -37,15 +37,15 @@ class InMemoryLibraryDataRepository:
     def save_ill_request(self, request: ILLRequestRecord) -> None:
         self._ill_requests[(request.library_id, request.ill_request_id)] = request
 
-    def set_catalog_candidates(self, title: str, candidates: list[CatalogCandidate]) -> None:
+    def set_catalog_candidates(self, library_id: str, title: str, candidates: list[CatalogCandidate]) -> None:
         """Test/fixture-only helper -- not part of the protocol, used by
         fixtures.py to seed what search_catalog_candidates returns."""
-        self._catalog[title] = candidates
+        self._catalog[(library_id, title)] = candidates
 
     def search_catalog_candidates(
         self, library_id: LibraryId, title: str, edition_hint: str | None
     ) -> list[CatalogCandidate]:
-        return list(self._catalog.get(title, []))
+        return list(self._catalog.get((library_id, title), []))
 
     def get_circulation_record(
         self, library_id: LibraryId, circulation_record_id: CirculationRecordId

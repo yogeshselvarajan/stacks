@@ -65,7 +65,7 @@ def seed_demo_library(repo: InMemoryLibraryDataRepository, library_id: str = "li
         requested_title="The Structure of Scientific Revolutions",
         requester_patron_id="patron_ill_1",
     ))
-    repo.set_catalog_candidates("The Structure of Scientific Revolutions", [
+    repo.set_catalog_candidates(library_id, "The Structure of Scientific Revolutions", [
         CatalogCandidate(holding_id="hold_1", edition="1st", location="lib_partner_a", availability="available"),
     ])
 
@@ -75,7 +75,7 @@ def seed_demo_library(repo: InMemoryLibraryDataRepository, library_id: str = "li
         requested_title="Middlemarch",
         requester_patron_id="patron_ill_2",
     ))
-    repo.set_catalog_candidates("Middlemarch", [
+    repo.set_catalog_candidates(library_id, "Middlemarch", [
         CatalogCandidate(holding_id="hold_2a", edition="Penguin Classics", location="lib_partner_a", availability="available"),
         CatalogCandidate(holding_id="hold_2b", edition="Oxford World's Classics", location="lib_partner_b", availability="available"),
     ])
