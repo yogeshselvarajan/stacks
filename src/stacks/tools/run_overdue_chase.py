@@ -2,7 +2,11 @@
 chasing. Plan 1 scope: no AgentCore Memory (has_recalled_hardship_history
 always False) and executed as a plain tool call, not yet driven by the
 Overdue Escalation Sequencer's Session Management + EventBridge nightly
-schedule. See docs/architecture/tool_architecture.md section 3.4.
+schedule. Unlike the three single-shot tools (resolve_room_conflict,
+route_ill_request, notify_parties), this tool is expected to be invoked
+repeatedly over time for the same circulation record with prior_reminder_tier_sent
+advancing monotonically by one tier per cycle. See docs/architecture/
+tool_architecture.md section 3.4.
 """
 from __future__ import annotations
 
@@ -17,6 +21,12 @@ from stacks.hitl.tier_ledger import TierLedger
 from stacks.types import ApprovalToken, SensitivityFlag
 
 _ESCALATION_LADDER = ["informational", "fee_mention", "hold_block", "collections_referral"]
+
+_SEVERITY_SIGNALS = {
+    1: ("fee", "fine", "charge"),
+    2: ("hold", "blocked", "suspended", "restricted"),
+    3: ("collections", "collection agency", "legal action", "referred to collections"),
+}
 
 
 def make_run_overdue_chase(
@@ -62,7 +72,7 @@ def make_run_overdue_chase(
         if days_overdue <= 0:
             return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "not_overdue", "escalation_log_write": None, "overdue_session_step_id": None}}]}
 
-        next_tier_index = min(record.prior_reminder_tier_sent + 1, len(_ESCALATION_LADDER) - 1) if record.prior_reminder_tier_sent > 0 else 0
+        next_tier_index = min(record.prior_reminder_tier_sent + 1, len(_ESCALATION_LADDER) - 1)
         tier_consequence = _ESCALATION_LADDER[next_tier_index]
 
         if action == "evaluate":
@@ -88,7 +98,22 @@ def make_run_overdue_chase(
 
             sensitivity_flags = [SensitivityFlag(f) for f in evaluation["sensitivity_flags"]]
             tier = classify_overdue_chase(evaluation["tier_consequence"], sensitivity_flags, evaluation["has_recalled_hardship_history"])
-            token = ApprovalToken(**approval_token) if approval_token else None
+
+            # Compute related_action_id before approval check
+            related_action_id = f"overdue:{circulation_record_id}"
+
+            # Parse and validate approval token (with fallback for malformed)
+            token = None
+            if approval_token:
+                try:
+                    token = ApprovalToken(**approval_token)
+                    # Validate token's related_action_id matches computed one
+                    if token.related_action_id != related_action_id:
+                        return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None}}]}
+                except Exception:
+                    # Malformed token: treat as no token supplied
+                    token = None
+
             if not is_approval_valid(tier, token.approver_role if token else None, Workflow.OVERDUE_CHASE):
                 return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None}}]}
 
@@ -96,9 +121,18 @@ def make_run_overdue_chase(
             if clause_id and (not message_body or clause_id not in message_body):
                 return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None}}]}
 
-            record.prior_reminder_tier_sent = evaluation["recommended_next_tier"]
+            # Check message body doesn't contain severity keywords higher than recommended tier
+            recommended_tier_index = evaluation["recommended_next_tier"]
+            if message_body:
+                message_lower = message_body.lower()
+                for tier_index in range(recommended_tier_index + 1, len(_ESCALATION_LADDER)):
+                    if tier_index in _SEVERITY_SIGNALS:
+                        for keyword in _SEVERITY_SIGNALS[tier_index]:
+                            if keyword in message_lower:
+                                return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None}}]}
+
+            record.prior_reminder_tier_sent = max(record.prior_reminder_tier_sent, evaluation["recommended_next_tier"])
             repo.save_circulation_record(record)
-            related_action_id = f"overdue:{circulation_record_id}"
             tier_ledger.record(library_id, related_action_id, tier, Workflow.OVERDUE_CHASE)
             escalation_log_write = {"circulation_record_id": circulation_record_id, "tier_sent": evaluation["recommended_next_tier"], "related_action_id": related_action_id}
             return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "committed", "escalation_log_write": escalation_log_write, "overdue_session_step_id": None}}]}

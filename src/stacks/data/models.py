@@ -74,4 +74,4 @@ class CirculationRecord(BaseModel):
     returned: bool = False
     prior_overdue_incident_count: int = 0
     flags: list[SensitivityFlag] = Field(default_factory=list)
-    prior_reminder_tier_sent: int = 0
+    prior_reminder_tier_sent: int = -1
