@@ -9,16 +9,22 @@ from stacks.agent import build_stacks_agent
 from stacks.identity.claims import StaffIdentityClaims
 
 
-def _build_bundle():
+def _build_bundle(monkeypatch):
     # build_stacks_agent fails closed if STACKS_BEDROCK_MODEL_ID is unset
     # (final_architecture.md section 4.2: the model ID is never hardcoded).
     # The two offline tests below only construct the Agent and inspect its
     # tool/hook registries -- they never invoke it -- so a syntactically
     # plausible placeholder is sufficient and is only injected when we are
     # NOT in a live-Bedrock run, so a real live run still fails loudly if
-    # the operator forgot to set the real model ID themselves.
-    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS"):
-        os.environ.setdefault("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+    # the operator forgot to set the real model ID themselves. Uses
+    # monkeypatch (not a bare os.environ.setdefault) so the placeholder is
+    # automatically un-set at the end of *this* test -- a bare setdefault
+    # with no cleanup previously leaked STACKS_BEDROCK_MODEL_ID into every
+    # later test in a full-suite run, wrongly "activating" other tests'
+    # opt-in live-Bedrock smoke tests that gate on that same env var
+    # (found while implementing Task 10 of Plan 2).
+    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS") and not os.environ.get("STACKS_BEDROCK_MODEL_ID"):
+        monkeypatch.setenv("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
 
     repo = InMemoryLibraryDataRepository()
     seed_demo_library(repo, library_id="lib_demo")
@@ -26,13 +32,13 @@ def _build_bundle():
     return build_stacks_agent(repo, claims, session_id="sess_test")
 
 
-def test_build_stacks_agent_derives_library_id_from_claims():
+def test_build_stacks_agent_derives_library_id_from_claims(monkeypatch):
     repo = InMemoryLibraryDataRepository()
     seed_demo_library(repo, library_id="lib_demo")
     claims = StaffIdentityClaims(role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review")
 
-    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS"):
-        os.environ.setdefault("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS") and not os.environ.get("STACKS_BEDROCK_MODEL_ID"):
+        monkeypatch.setenv("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
 
     bundle = build_stacks_agent(repo, claims, session_id="sess_1", now=lambda: datetime(2026, 9, 5, tzinfo=timezone.utc))
 
@@ -55,18 +61,18 @@ def test_build_stacks_agent_derives_library_id_from_claims():
     assert result["status"] == "success"
 
 
-def test_build_stacks_agent_registers_all_five_plan_1_tools():
-    bundle = _build_bundle()
+def test_build_stacks_agent_registers_all_five_plan_1_tools(monkeypatch):
+    bundle = _build_bundle(monkeypatch)
     tool_names = {t.tool_name for t in bundle.agent.tool_registry.registry.values()}
     assert tool_names == {"get_library_data", "resolve_room_conflict", "route_ill_request", "run_overdue_chase", "notify_parties"}
 
 
-def test_build_stacks_agent_registers_both_hooks():
+def test_build_stacks_agent_registers_both_hooks(monkeypatch):
     from stacks.hitl.hitl_gate import HitlGateHook
     from stacks.hooks.audit_log import AuditLogHook
     from strands.hooks import BeforeToolCallEvent, AfterToolCallEvent
 
-    bundle = _build_bundle()
+    bundle = _build_bundle(monkeypatch)
     registry = bundle.agent.hooks
     before_owners = {cb.__self__.__class__ for cb in registry._registered_callbacks.get(BeforeToolCallEvent, [])}
     after_owners = {cb.__self__.__class__ for cb in registry._registered_callbacks.get(AfterToolCallEvent, [])}
@@ -78,13 +84,13 @@ def test_build_stacks_agent_registers_both_hooks():
     not os.environ.get("RUN_LIVE_BEDROCK_TESTS"),
     reason="Requires real AWS credentials and Bedrock model access. Set RUN_LIVE_BEDROCK_TESTS=1 to run.",
 )
-def test_green_room_booking_conflict_resolves_end_to_end_via_real_bedrock():
+def test_green_room_booking_conflict_resolves_end_to_end_via_real_bedrock(monkeypatch):
     """The one test in this plan that makes a real Bedrock call. Exercises
     the full Agent + HitlGateHook + AuditLogHook wiring together, per this
     plan's Global Constraints note that only this test is allowed to touch
     AWS.
     """
-    bundle = _build_bundle()
+    bundle = _build_bundle(monkeypatch)
     result = bundle.agent(
         "There is a room-booking conflict between booking b_recurring_a and "
         "booking b_oneoff_a in room_a. Resolve it per the room booking "
@@ -100,8 +106,8 @@ def test_green_room_booking_conflict_resolves_end_to_end_via_real_bedrock():
     not os.environ.get("RUN_LIVE_BEDROCK_TESTS"),
     reason="Requires real AWS credentials and Bedrock model access. Set RUN_LIVE_BEDROCK_TESTS=1 to run.",
 )
-def test_red_room_booking_conflict_interrupts_and_resumes_via_real_bedrock():
-    bundle = _build_bundle()
+def test_red_room_booking_conflict_interrupts_and_resumes_via_real_bedrock(monkeypatch):
+    bundle = _build_bundle(monkeypatch)
     result = bundle.agent(
         "There is a room-booking conflict between booking b_recurring_b and "
         "booking b_walkin_b in room_b. Evaluate it and attempt to resolve "
