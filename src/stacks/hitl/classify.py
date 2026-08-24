@@ -79,7 +79,7 @@ def classify_ill_routing(
         return Tier.RED
     if ambiguity == "none":
         return Tier.GREEN
-    if ambiguity == "multiple_editions" and resolved_via_substitution:
+    if ambiguity == "multiple_editions" and resolved_via_substitution is True:
         return Tier.GREEN
     if ambiguity in ("multiple_editions", "no_match"):
         return Tier.YELLOW

@@ -112,19 +112,32 @@ def make_route_ill_request(
             if evaluation is None:
                 return {"status": "error", "content": [{"text": "evaluate_not_called"}]}
 
+            # "Resolved via substitution" is definitionally a claim about
+            # having converged on a specific holding -- a commit with no
+            # chosen_holding_id (a no-match outcome) can never honestly be
+            # "resolved", regardless of what the caller passed. Computed
+            # once, up front, and used consistently for both tier
+            # classification and every returned resolved_via_substitution
+            # field below, so no branch can ever report True when nothing
+            # was actually substituted. Without this guard,
+            # resolved_via_substitution=True with chosen_holding_id=None
+            # would classify at GREEN and let an ambiguous request close
+            # as NO_MATCH with no approval token and no human ever asked.
+            effective_resolved_via_substitution = resolved_via_substitution and chosen_holding_id is not None
+
             valid_ids = {c["holding_id"] for c in evaluation["candidate_matches"]}
             if chosen_holding_id is not None and chosen_holding_id not in valid_ids:
-                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_invalid_choice", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_invalid_choice", "queue_status_write": None, "resolved_via_substitution": effective_resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
             # Validate rationale cites applicable policy clause (when present)
             applicable_clause = evaluation["applicable_policy_clause"]
             if applicable_clause is not None:
                 clause_id = applicable_clause["clause_id"]
                 if not rationale or clause_id not in rationale:
-                    return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_invalid_choice", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                    return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_invalid_choice", "queue_status_write": None, "resolved_via_substitution": effective_resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
             sensitivity_flags = [SensitivityFlag(f) for f in evaluation["sensitivity_flags"]]
-            tier = classify_ill_routing(evaluation["ambiguity"], sensitivity_flags, resolved_via_substitution)
+            tier = classify_ill_routing(evaluation["ambiguity"], sensitivity_flags, effective_resolved_via_substitution)
 
             # Compute related_action_id before approval check
             related_action_id = f"ill_request:{ill_request_id}"
@@ -136,25 +149,28 @@ def make_route_ill_request(
                     token = ApprovalToken(**approval_token)
                     # Validate token's related_action_id matches computed one
                     if token.related_action_id != related_action_id:
-                        return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_missing_approval", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                        return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_missing_approval", "queue_status_write": None, "resolved_via_substitution": effective_resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
                 except Exception:
                     # Malformed token: treat as no token supplied
                     token = None
 
             if not is_approval_valid(tier, token.approver_role if token else None, Workflow.ILL_ROUTING):
-                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_missing_approval", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_missing_approval", "queue_status_write": None, "resolved_via_substitution": effective_resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
             tier_ledger.record(library_id, related_action_id, tier, Workflow.ILL_ROUTING)
 
             if chosen_holding_id is None:
                 request.status = ILLRequestStatus.NO_MATCH
                 repo.save_ill_request(request)
-                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "no_match_recorded", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                # effective_resolved_via_substitution is always False here
+                # (chosen_holding_id is None), so this never reports the
+                # caller's raw claim as fact when nothing was substituted.
+                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "no_match_recorded", "queue_status_write": None, "resolved_via_substitution": effective_resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
             request.status = ILLRequestStatus.ROUTED
             repo.save_ill_request(request)
             queue_status_write = {"ill_request_id": ill_request_id, "chosen_holding_id": chosen_holding_id, "related_action_id": related_action_id}
-            return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "committed", "queue_status_write": queue_status_write, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+            return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "committed", "queue_status_write": queue_status_write, "resolved_via_substitution": effective_resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
         return {"status": "error", "content": [{"text": f"invalid_action: {action!r}"}]}
 

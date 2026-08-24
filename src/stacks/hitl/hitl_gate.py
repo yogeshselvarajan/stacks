@@ -151,7 +151,19 @@ def _classify_from_evaluation(
         # specialist runs between evaluate and commit), so it is read from
         # the commit call's own tool_input, never from the cached
         # evaluation, which was computed before the specialist ran.
-        resolved_via_substitution = bool((tool_input or {}).get("resolved_via_substitution"))
+        #
+        # "Resolved via substitution" is definitionally a claim about
+        # having converged on a specific holding -- a commit with no
+        # chosen_holding_id (a no-match outcome) can never honestly be
+        # "resolved", regardless of the caller's flag. This mirrors
+        # route_ill_request's own effective_resolved_via_substitution
+        # guard exactly: both sites must agree, or the gate and the tool
+        # disagree about the tier.
+        ill_tool_input = tool_input or {}
+        resolved_via_substitution = (
+            bool(ill_tool_input.get("resolved_via_substitution"))
+            and ill_tool_input.get("chosen_holding_id") is not None
+        )
         return classify_ill_routing(evaluation["ambiguity"], sensitivity_flags, resolved_via_substitution)
     if workflow is Workflow.OVERDUE_CHASE:
         return classify_overdue_chase(

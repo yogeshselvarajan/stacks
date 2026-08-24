@@ -232,11 +232,76 @@ def test_ill_gate_reads_resolved_via_substitution_from_tool_input_not_evaluation
             "library_id": "lib_demo",
             "action": "commit",
             "ill_request_id": "ill_req_123",
+            "chosen_holding_id": "hold_2a",
             "resolved_via_substitution": True,
         },
     )
     hook._gate(event)
-    # A convergent substitution is GREEN -- the gate must not raise an
-    # interrupt.
+    # A convergent substitution with an actual chosen holding is GREEN --
+    # the gate must not raise an interrupt.
     assert event.interrupt_calls == []
     assert event.cancel_tool is False
+
+
+def test_ill_gate_no_holding_with_resolved_via_substitution_true_is_not_green():
+    """resolved_via_substitution is definitionally a claim about having
+    converged on a specific holding -- a commit with no chosen_holding_id
+    (a no-match outcome) can never honestly be "resolved", regardless of
+    the flag. Without this guard, the gate would classify this as GREEN
+    and never interrupt, letting an ambiguous request close as NO_MATCH
+    with no human ever asked (reviewer-confirmed bypass)."""
+    hook = _hook_with_ill_cached("multiple_editions", [])
+    event = _FakeEvent(
+        "route_ill_request",
+        {
+            "library_id": "lib_demo",
+            "action": "commit",
+            "ill_request_id": "ill_req_123",
+            "chosen_holding_id": None,
+            "resolved_via_substitution": True,
+        },
+    )
+    with pytest.raises(InterruptException):
+        hook._gate(event)
+    assert len(event.interrupt_calls) == 1
+    assert event.interrupt_calls[0][1]["tier"] == "YELLOW"
+
+
+def test_ill_gate_sensitivity_flag_overrides_convergent_substitution_at_red():
+    """Gate-level mirror of classify.py's overriding rule: a sensitivity
+    flag forces RED regardless of resolved_via_substitution=True."""
+    hook = _hook_with_ill_cached("multiple_editions", [SensitivityFlag.RARE_OR_SPECIAL_COLLECTIONS])
+    event = _FakeEvent(
+        "route_ill_request",
+        {
+            "library_id": "lib_demo",
+            "action": "commit",
+            "ill_request_id": "ill_req_123",
+            "chosen_holding_id": "hold_2a",
+            "resolved_via_substitution": True,
+        },
+    )
+    with pytest.raises(InterruptException):
+        hook._gate(event)
+    assert len(event.interrupt_calls) == 1
+    assert event.interrupt_calls[0][1]["tier"] == "RED"
+
+
+def test_ill_gate_policy_exception_overrides_convergent_substitution_at_red():
+    """Gate-level mirror of classify.py's overriding rule: ambiguity ==
+    "policy_exception" forces RED regardless of resolved_via_substitution=True."""
+    hook = _hook_with_ill_cached("policy_exception", [])
+    event = _FakeEvent(
+        "route_ill_request",
+        {
+            "library_id": "lib_demo",
+            "action": "commit",
+            "ill_request_id": "ill_req_123",
+            "chosen_holding_id": "hold_2a",
+            "resolved_via_substitution": True,
+        },
+    )
+    with pytest.raises(InterruptException):
+        hook._gate(event)
+    assert len(event.interrupt_calls) == 1
+    assert event.interrupt_calls[0][1]["tier"] == "RED"

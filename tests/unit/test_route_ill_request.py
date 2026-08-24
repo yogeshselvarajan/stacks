@@ -246,6 +246,51 @@ def test_commit_with_resolved_via_substitution_true_is_green_without_approval_to
     assert tier_ledger.get("lib_demo", "ill_request:ill_ambiguous") == (Tier.GREEN, Workflow.ILL_ROUTING)
 
 
+def test_commit_no_holding_with_resolved_via_substitution_true_is_blocked_not_green():
+    """resolved_via_substitution is definitionally a claim about having
+    converged on a specific holding -- a commit with chosen_holding_id=None
+    (a no-match outcome) can never honestly be "resolved", regardless of
+    the caller's flag. Without this guard, this call would classify GREEN
+    and close the request as NO_MATCH with no approval token and no human
+    ever asked (reviewer-confirmed bypass on Task 11)."""
+    tool_fn, repo, tier_ledger = _build()
+    tool_fn(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
+    result = tool_fn(
+        library_id="lib_demo", ill_request_id="ill_ambiguous", action="commit",
+        chosen_holding_id=None, rationale="No confident match per ILL-1.",
+        resolved_via_substitution=True,
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "blocked_missing_approval"
+    assert body["resolved_via_substitution"] is False
+    from stacks.hitl.classify import Tier, Workflow
+    assert tier_ledger.get("lib_demo", "ill_request:ill_ambiguous") is None
+    assert repo.get_ill_request("lib_demo", "ill_ambiguous").status.value == "open"
+
+
+def test_commit_no_holding_with_resolved_via_substitution_true_succeeds_with_yellow_approval():
+    """The same no-holding + resolved_via_substitution=True call, but with
+    a valid YELLOW-tier approval token, commits as no_match_recorded --
+    confirming the effective tier is YELLOW (not RED, not an unreachable
+    GREEN-that-was-actually-blocked), and that the returned
+    resolved_via_substitution honestly reports False since nothing was
+    actually substituted."""
+    tool_fn, repo, tier_ledger = _build()
+    tool_fn(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
+    result = tool_fn(
+        library_id="lib_demo", ill_request_id="ill_ambiguous", action="commit",
+        chosen_holding_id=None, rationale="No confident match per ILL-1.",
+        resolved_via_substitution=True,
+        approval_token={"token": "t", "approver_role": "ill_coordinator", "related_action_id": "ill_request:ill_ambiguous"},
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "no_match_recorded"
+    assert body["resolved_via_substitution"] is False
+    from stacks.hitl.classify import Tier, Workflow
+    assert tier_ledger.get("lib_demo", "ill_request:ill_ambiguous") == (Tier.YELLOW, Workflow.ILL_ROUTING)
+    assert repo.get_ill_request("lib_demo", "ill_ambiguous").status.value == "no_match"
+
+
 def test_committed_result_carries_requester_patron_id_and_subject_area_for_memory_hook():
     repo = _repo()
     memory = InMemoryMemoryStore()
