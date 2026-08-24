@@ -93,3 +93,36 @@ def test_does_not_fire_on_a_green_or_yellow_overdue_commit_even_with_hardship_fl
     hook._record(event)
 
     assert store.get_hardship_history("lib_demo", "patron_5") is None
+
+
+class _RaisingMemoryStore:
+    """Minimal MemoryStore stand-in whose record_ill_routing_event always
+    raises, to exercise MemoryEventHook's fail-closed write-failure path.
+    """
+
+    def get_ill_substitution_pattern(self, library_id, requester_key):
+        return None
+
+    def record_ill_routing_event(self, library_id, requester_key, request_frequency_delta, subject_area, resolved_via_substitution):
+        raise RuntimeError("simulated memory store failure")
+
+    def get_hardship_history(self, library_id, patron_id):
+        return None
+
+    def record_hardship_flag(self, library_id, patron_id, flagged_at):
+        raise RuntimeError("simulated memory store failure")
+
+
+def test_write_failure_is_fail_closed_and_rewrites_event_result_to_error():
+    store = _RaisingMemoryStore()
+    hook = MemoryEventHook(store, library_id="lib_demo")
+
+    event = _fake_after_tool_call_event(
+        "route_ill_request",
+        {"library_id": "lib_demo", "ill_request_id": "ill_6", "action": "commit"},
+        {"ill_request_id": "ill_6", "status": "committed", "requester_patron_id": "patron_6", "resolved_via_substitution": True, "subject_area": "history"},
+    )
+    hook._record(event)
+
+    assert event.result["status"] == "error"
+    assert "memory_write_failed" in event.result["content"][0]["text"]
