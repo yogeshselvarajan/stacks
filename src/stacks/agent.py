@@ -18,6 +18,7 @@ from strands import Agent
 from strands.models import BedrockModel
 
 from stacks.data.repository import LibraryDataRepository
+from stacks.identity.claims import StaffIdentityClaims
 from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.hitl_gate import HitlGateHook
 from stacks.hitl.tier_ledger import TierLedger
@@ -55,17 +56,19 @@ class StacksAgentBundle:
 
 def build_stacks_agent(
     repo: LibraryDataRepository,
-    library_id: str,
+    claims: StaffIdentityClaims,
     session_id: str,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
 ) -> StacksAgentBundle:
     """Builds one Stacks Agent scoped to one library tenant and one session.
 
-    library_id is passed directly here at Plan 1 scope. A later plan
-    (AgentCore Identity integration) replaces the caller of this function
-    with one that reads library_id from a verified JWT claim instead of a
-    plain argument; this function's own body does not change.
+    claims is a StaffIdentityClaims already verified by a ClaimsVerifier
+    (stacks.identity.claims) -- library_id is read from it, never accepted
+    as a bare, trusted string. docs/architecture/final_architecture.md
+    section 10.4 step 3: the BFF constructs Invocation State from verified
+    claims, never a client-supplied field.
     """
+    library_id = claims.library_id
     room_conflict_cache = EvaluationCache()
     ill_cache = EvaluationCache()
     overdue_cache = EvaluationCache()

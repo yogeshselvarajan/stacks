@@ -1,10 +1,12 @@
 import os
+from datetime import datetime, timezone
 
 import pytest
 
 from stacks.data.fixtures import seed_demo_library
 from stacks.data.memory_repository import InMemoryLibraryDataRepository
 from stacks.agent import build_stacks_agent
+from stacks.identity.claims import StaffIdentityClaims
 
 
 def _build_bundle():
@@ -20,7 +22,37 @@ def _build_bundle():
 
     repo = InMemoryLibraryDataRepository()
     seed_demo_library(repo, library_id="lib_demo")
-    return build_stacks_agent(repo, library_id="lib_demo", session_id="sess_test")
+    claims = StaffIdentityClaims(role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review")
+    return build_stacks_agent(repo, claims, session_id="sess_test")
+
+
+def test_build_stacks_agent_derives_library_id_from_claims():
+    repo = InMemoryLibraryDataRepository()
+    seed_demo_library(repo, library_id="lib_demo")
+    claims = StaffIdentityClaims(role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review")
+
+    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS"):
+        os.environ.setdefault("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+
+    bundle = build_stacks_agent(repo, claims, session_id="sess_1", now=lambda: datetime(2026, 9, 5, tzinfo=timezone.utc))
+
+    # get_library_data is scoped internally to session_library_id, derived
+    # from claims.library_id. A query naming the same tenant string
+    # ("lib_demo") must succeed -- if build_stacks_agent forgot to unwrap
+    # claims.library_id and instead closed the tool over the whole claims
+    # object, this same query would come back cross_tenant_denied because
+    # "lib_demo" != <StaffIdentityClaims instance>.
+    get_library_data_tool = bundle.agent.tool_registry.registry["get_library_data"]
+    result = get_library_data_tool(
+        library_id="lib_demo",
+        query_type="room_calendar",
+        room_calendar_filter={
+            "room_id": "room_a",
+            "start": "2026-09-01T00:00:00+00:00",
+            "end": "2026-09-02T00:00:00+00:00",
+        },
+    )
+    assert result["status"] == "success"
 
 
 def test_build_stacks_agent_registers_all_five_plan_1_tools():
