@@ -115,6 +115,31 @@ def make_run_overdue_chase(
             # Compute related_action_id before approval check
             related_action_id = f"overdue:{circulation_record_id}"
 
+            # Idempotency guard against this exact tier advance being
+            # re-committed a second time. Unlike resolve_room_conflict and
+            # route_ill_request (single-shot commits), run_overdue_chase is
+            # invoked repeatedly over time for the same circulation record,
+            # so related_action_id alone (constant across every night) is
+            # not a safe idempotency key -- keying on it directly would
+            # block every legitimate later night's escalation too. Instead
+            # key on the specific tier this call would advance to
+            # (evaluation["recommended_next_tier"], fixed at evaluate
+            # time), so only a genuine re-commit of the SAME tier step is
+            # blocked, never the next night's advance to a new tier.
+            #
+            # This closes a real double-escalation path: MemoryEventHook's
+            # AfterToolCallEvent fires after this tool has already
+            # mutated the repository and tier_ledger, so if it then
+            # rewrites event.result to an error (its fail-closed
+            # behavior), a caller that retries after seeing that error
+            # would otherwise re-evaluate at prior_reminder_tier_sent + 1
+            # again -- advancing straight to the NEXT tier and skipping
+            # this one, violating OD-1's "one tier per contact, never
+            # skipping a tier" (whole-branch review Important 4).
+            tier_advance_key = f"overdue_tier_advance:{circulation_record_id}:{evaluation['recommended_next_tier']}"
+            if tier_ledger.get(library_id, tier_advance_key) is not None:
+                return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "already_committed", "escalation_log_write": None, "overdue_session_step_id": None, "patron_id": evaluation["patron_id"], "hitl_tier": None}}]}
+
             # Parse and validate approval token (with fallback for malformed)
             token = None
             if approval_token:
@@ -147,6 +172,7 @@ def make_run_overdue_chase(
             record.prior_reminder_tier_sent = max(record.prior_reminder_tier_sent, evaluation["recommended_next_tier"])
             repo.save_circulation_record(record)
             tier_ledger.record(library_id, related_action_id, tier, Workflow.OVERDUE_CHASE)
+            tier_ledger.record(library_id, tier_advance_key, tier, Workflow.OVERDUE_CHASE)
             escalation_log_write = {"circulation_record_id": circulation_record_id, "tier_sent": evaluation["recommended_next_tier"], "related_action_id": related_action_id}
             return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "committed", "escalation_log_write": escalation_log_write, "overdue_session_step_id": None, "patron_id": evaluation["patron_id"], "hitl_tier": tier.value, "sensitivity_flags": evaluation["sensitivity_flags"]}}]}
 

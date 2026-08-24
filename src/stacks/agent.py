@@ -140,6 +140,14 @@ def build_stacks_agent(
             notify_parties,
             disambiguate_ill_candidates,
         ],
+        # Order matters here beyond readability: AfterToolCallEvent's
+        # callbacks run in REVERSE registration order (confirmed via
+        # strands.hooks.registry.AfterToolCallEvent.should_reverse_callbacks
+        # == True), so memory_event's fail-closed error-rewrite (if the
+        # Memory write fails) runs BEFORE audit_log sees event.result --
+        # this is why a memory-write failure still gets correctly audited
+        # as an error today. Do not reorder this list without preserving
+        # that (whole-branch review Important 4).
         hooks=[hitl_gate, audit_log, memory_event],
         system_prompt=SYSTEM_PROMPT,
     )

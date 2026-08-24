@@ -115,6 +115,32 @@ def test_malformed_approval_token_treated_as_none():
     assert result["content"][0]["json"]["status"] == "committed"
 
 
+def test_re_invoking_commit_for_the_same_tier_does_not_advance_or_recommit_it_twice():
+    """Whole-branch review Important 4: AfterToolCallEvent fires after this
+    tool has already mutated the repository and tier_ledger. If
+    MemoryEventHook then rewrites event.result to an error (its
+    fail-closed behavior), a caller that retries the same commit call
+    would otherwise be treated as a fresh, legitimate commit -- re-running
+    the same tier's notify/audit path a second time and, in the general
+    case, risking a double-escalation. This mirrors resolve_room_conflict's
+    own already_committed idempotency guard, keyed to the specific tier
+    step (not the constant related_action_id, since run_overdue_chase is
+    legitimately re-invoked every night for a NEW tier)."""
+    tool_fn, repo, tier_ledger = _build()
+    tool_fn(library_id="lib_demo", circulation_record_id="circ_green", action="evaluate")
+    first = tool_fn(library_id="lib_demo", circulation_record_id="circ_green", action="commit", message_body="Reminder per OD-1: your item is overdue.")
+    assert first["content"][0]["json"]["status"] == "committed"
+    assert repo.get_circulation_record("lib_demo", "circ_green").prior_reminder_tier_sent == 0
+
+    # Re-invoke commit for the exact same case, no fresh evaluate -- as a
+    # caller retrying after seeing an apparent (hook-injected) failure
+    # would do.
+    second = tool_fn(library_id="lib_demo", circulation_record_id="circ_green", action="commit", message_body="Reminder per OD-1: your item is overdue.")
+    body = second["content"][0]["json"]
+    assert body["status"] == "already_committed"
+    assert repo.get_circulation_record("lib_demo", "circ_green").prior_reminder_tier_sent == 0
+
+
 def test_escalation_ladder_advances_over_multiple_cycles():
     """Record's tier must advance one step per cycle, not stay stuck at tier 0.
     Core test: the second evaluate should return a different tier than the first."""
