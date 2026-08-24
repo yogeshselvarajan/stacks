@@ -53,7 +53,7 @@ def test_record_ill_routing_event_accumulates_frequency_and_subject_areas():
     pattern2 = store.get_ill_substitution_pattern("lib_demo", "patron_x")
     assert pattern2 is not None
     assert pattern2.request_frequency == 5  # 2 + 3
-    assert set(pattern2.subject_areas) == {"history", "science"}
+    assert pattern2.subject_areas == ["history", "science"]
     assert pattern2.has_accepted_substitution_without_escalation is True
 
     # Third call: frequency +1, repeated subject_area "history", resolved_via_substitution=False
@@ -61,7 +61,7 @@ def test_record_ill_routing_event_accumulates_frequency_and_subject_areas():
     pattern3 = store.get_ill_substitution_pattern("lib_demo", "patron_x")
     assert pattern3 is not None
     assert pattern3.request_frequency == 6  # 2 + 3 + 1
-    assert set(pattern3.subject_areas) == {"history", "science"}  # "history" not duplicated
+    assert pattern3.subject_areas == ["history", "science"]  # "history" not duplicated
     assert pattern3.has_accepted_substitution_without_escalation is True  # stays True, never flips back
 
 
