@@ -52,6 +52,10 @@ class RequesterSubstitutionPattern(BaseModel):
     last_updated: datetime
 
 
+class HardshipHistoryFact(BaseModel):
+    flagged_at: datetime
+
+
 class MemoryWriteInput(BaseModel):
     memory_namespace: MemoryNamespace
     strategy: str
