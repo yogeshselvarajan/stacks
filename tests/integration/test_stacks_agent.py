@@ -61,10 +61,17 @@ def test_build_stacks_agent_derives_library_id_from_claims(monkeypatch):
     assert result["status"] == "success"
 
 
-def test_build_stacks_agent_registers_all_five_plan_1_tools(monkeypatch):
+def test_build_stacks_agent_registers_all_six_tools(monkeypatch):
     bundle = _build_bundle(monkeypatch)
     tool_names = {t.tool_name for t in bundle.agent.tool_registry.registry.values()}
-    assert tool_names == {"get_library_data", "resolve_room_conflict", "route_ill_request", "run_overdue_chase", "notify_parties"}
+    assert tool_names == {
+        "get_library_data",
+        "resolve_room_conflict",
+        "route_ill_request",
+        "run_overdue_chase",
+        "notify_parties",
+        "disambiguate_ill_candidates",
+    }
 
 
 def test_build_stacks_agent_registers_both_hooks(monkeypatch):

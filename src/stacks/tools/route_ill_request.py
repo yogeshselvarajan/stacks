@@ -1,8 +1,11 @@
-"""route_ill_request -- evaluate/commit for ambiguous ILL routing. Plan 1
-scope: no AgentCore Memory (requester_pattern always None) and no ILL
-Disambiguation Specialist (ambiguity="multiple_editions" stays YELLOW,
-never auto-resolved by specialist convergence). See
-docs/architecture/tool_architecture.md section 3.3.
+"""route_ill_request -- evaluate/commit for ambiguous ILL routing.
+
+commit accepts a resolved_via_substitution flag, set by the calling agent
+from the ILL Disambiguation Specialist's own ILLDisambiguationResult
+(stacks.tools.disambiguate_ill_candidates), which lets a confidently
+converged "multiple_editions" case commit at GREEN instead of YELLOW (see
+classify_ill_routing). See docs/architecture/tool_architecture.md
+section 3.3.
 """
 from __future__ import annotations
 
@@ -33,6 +36,7 @@ def make_route_ill_request(
         action: str,
         chosen_holding_id: str | None = None,
         rationale: str | None = None,
+        resolved_via_substitution: bool = False,
         approval_token: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Evaluate or commit a routing decision for an interlibrary-loan
@@ -47,6 +51,12 @@ def make_route_ill_request(
                 "no_match" outcome.
             rationale: commit-only. Must cite the evaluate response's
                 clause_id when one applies.
+            resolved_via_substitution: commit-only. True when the ILL
+                Disambiguation Specialist converged confidently on
+                chosen_holding_id for an originally "multiple_editions"
+                case. The agent sets this based on the specialist's own
+                ILLDisambiguationResult -- never invented independently of
+                that result.
             approval_token: commit-only for YELLOW/RED-classified cases.
 
         Returns:
@@ -104,17 +114,17 @@ def make_route_ill_request(
 
             valid_ids = {c["holding_id"] for c in evaluation["candidate_matches"]}
             if chosen_holding_id is not None and chosen_holding_id not in valid_ids:
-                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_invalid_choice", "queue_status_write": None, "resolved_via_substitution": False, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_invalid_choice", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
             # Validate rationale cites applicable policy clause (when present)
             applicable_clause = evaluation["applicable_policy_clause"]
             if applicable_clause is not None:
                 clause_id = applicable_clause["clause_id"]
                 if not rationale or clause_id not in rationale:
-                    return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_invalid_choice", "queue_status_write": None, "resolved_via_substitution": False, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                    return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_invalid_choice", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
             sensitivity_flags = [SensitivityFlag(f) for f in evaluation["sensitivity_flags"]]
-            tier = classify_ill_routing(evaluation["ambiguity"], sensitivity_flags)
+            tier = classify_ill_routing(evaluation["ambiguity"], sensitivity_flags, resolved_via_substitution)
 
             # Compute related_action_id before approval check
             related_action_id = f"ill_request:{ill_request_id}"
@@ -126,25 +136,25 @@ def make_route_ill_request(
                     token = ApprovalToken(**approval_token)
                     # Validate token's related_action_id matches computed one
                     if token.related_action_id != related_action_id:
-                        return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_missing_approval", "queue_status_write": None, "resolved_via_substitution": False, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                        return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_missing_approval", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
                 except Exception:
                     # Malformed token: treat as no token supplied
                     token = None
 
             if not is_approval_valid(tier, token.approver_role if token else None, Workflow.ILL_ROUTING):
-                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_missing_approval", "queue_status_write": None, "resolved_via_substitution": False, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_missing_approval", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
             tier_ledger.record(library_id, related_action_id, tier, Workflow.ILL_ROUTING)
 
             if chosen_holding_id is None:
                 request.status = ILLRequestStatus.NO_MATCH
                 repo.save_ill_request(request)
-                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "no_match_recorded", "queue_status_write": None, "resolved_via_substitution": False, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+                return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "no_match_recorded", "queue_status_write": None, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
             request.status = ILLRequestStatus.ROUTED
             repo.save_ill_request(request)
             queue_status_write = {"ill_request_id": ill_request_id, "chosen_holding_id": chosen_holding_id, "related_action_id": related_action_id}
-            return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "committed", "queue_status_write": queue_status_write, "resolved_via_substitution": False, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
+            return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "committed", "queue_status_write": queue_status_write, "resolved_via_substitution": resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
         return {"status": "error", "content": [{"text": f"invalid_action: {action!r}"}]}
 

@@ -1,14 +1,15 @@
-"""Builds the Stacks Agent: registers the five Plan 1 tools and three hooks
-(HITL gate, audit log, memory event) against a shared repository and HITL
+"""Builds the Stacks Agent: registers the six tools and three hooks (HITL
+gate, audit log, memory event) against a shared repository and HITL
 support objects. See docs/architecture/final_architecture.md section 4.2.
 
-Plan 1 scope: single agent, five tools (get_library_data,
+Plan 1 scope was single agent, five tools (get_library_data,
 resolve_room_conflict, route_ill_request, run_overdue_chase,
-notify_parties). Plan 2 Task 8 wires a MemoryStore (defaulting to
+notify_parties). Plan 2 Task 8 wired a MemoryStore (defaulting to
 InMemoryMemoryStore) and MemoryEventHook alongside the two Plan 1 hooks.
-The sixth tool (disambiguate_ill_candidates, the ILL Disambiguation
-Specialist wrapper), AgentCore Identity, and a real AgentCoreMemoryStore
-backing are still later plans -- see CLAUDE.md's build order.
+Plan 2 Task 11 wires in the sixth tool, disambiguate_ill_candidates (the
+ILL Disambiguation Specialist wrapper, Agents-as-Tools). AgentCore
+Identity and a real AgentCoreMemoryStore backing are still later plans --
+see CLAUDE.md's build order.
 """
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ from stacks.hitl.tier_ledger import TierLedger
 from stacks.hooks.audit_log import AuditLogHook, AuditLogSink
 from stacks.hooks.memory_event import MemoryEventHook
 from stacks.memory.store import InMemoryMemoryStore, MemoryStore
+from stacks.tools.disambiguate_ill_candidates import make_disambiguate_ill_candidates
 from stacks.tools.get_library_data import make_get_library_data
 from stacks.tools.notify_parties import NotificationSink, make_notify_parties
 from stacks.tools.resolve_room_conflict import make_resolve_room_conflict
@@ -45,7 +47,13 @@ tool's own response. If a commit is blocked pending human approval, say so \
 plainly and stop; do not retry the same commit without a new approval_token. \
 After a successful commit that a workflow requires notifying about, call \
 notify_parties with related_action_id set to the commit result's own \
-related_action_id field."""
+related_action_id field. When route_ill_request's evaluate reports \
+ambiguity 'multiple_editions', call disambiguate_ill_candidates with that \
+evaluate response's own candidate_matches and requester_pattern before \
+choosing a commit action; if it returns a confident narrowed_candidate_id, \
+commit with that holding id and resolved_via_substitution=true; otherwise \
+commit reflects the case is still ambiguous exactly as it already would \
+without the specialist."""
 
 
 class StacksAgentBundle:
@@ -113,9 +121,18 @@ def build_stacks_agent(
         temperature=0.2,
     )
 
+    disambiguate_ill_candidates = make_disambiguate_ill_candidates(repo, library_id, model)
+
     agent = Agent(
         model=model,
-        tools=[get_library_data, resolve_room_conflict, route_ill_request, run_overdue_chase, notify_parties],
+        tools=[
+            get_library_data,
+            resolve_room_conflict,
+            route_ill_request,
+            run_overdue_chase,
+            notify_parties,
+            disambiguate_ill_candidates,
+        ],
         hooks=[hitl_gate, audit_log, memory_event],
         system_prompt=SYSTEM_PROMPT,
     )

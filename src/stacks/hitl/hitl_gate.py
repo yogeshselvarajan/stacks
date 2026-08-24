@@ -77,7 +77,7 @@ class HitlGateHook(HookProvider):
                 event.cancel_tool = "blocked_missing_evaluation"
                 return
 
-            tier = _classify_from_evaluation(workflow, evaluation)
+            tier = _classify_from_evaluation(workflow, evaluation, tool_input)
             # A genuinely tied ROOM_BOOKING case requires an approval token
             # from the tool itself regardless of tier (resolve_room_conflict's
             # own fix) -- so a tied GREEN case must still fall through to the
@@ -140,12 +140,19 @@ def _related_action_id_for(workflow: Workflow, case_id: str) -> str:
     raise ValueError(f"unrecognized workflow: {workflow!r}")
 
 
-def _classify_from_evaluation(workflow: Workflow, evaluation: dict[str, Any]) -> Tier:
+def _classify_from_evaluation(
+    workflow: Workflow, evaluation: dict[str, Any], tool_input: dict[str, Any] | None = None
+) -> Tier:
     sensitivity_flags = [SensitivityFlag(f) for f in evaluation["sensitivity_flags"]]
     if workflow is Workflow.ROOM_BOOKING:
         return classify_room_conflict(sensitivity_flags)
     if workflow is Workflow.ILL_ROUTING:
-        return classify_ill_routing(evaluation["ambiguity"], sensitivity_flags)
+        # resolved_via_substitution is only known at commit time (the
+        # specialist runs between evaluate and commit), so it is read from
+        # the commit call's own tool_input, never from the cached
+        # evaluation, which was computed before the specialist ran.
+        resolved_via_substitution = bool((tool_input or {}).get("resolved_via_substitution"))
+        return classify_ill_routing(evaluation["ambiguity"], sensitivity_flags, resolved_via_substitution)
     if workflow is Workflow.OVERDUE_CHASE:
         return classify_overdue_chase(
             evaluation["tier_consequence"], sensitivity_flags, evaluation.get("has_recalled_hardship_history", False)

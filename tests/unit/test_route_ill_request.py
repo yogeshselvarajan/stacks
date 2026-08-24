@@ -231,6 +231,21 @@ def test_evaluate_fails_open_on_memory_retrieval_error():
     assert result["content"][0]["json"]["requester_pattern"] is None
 
 
+def test_commit_with_resolved_via_substitution_true_is_green_without_approval_token():
+    tool_fn, _, tier_ledger = _build()
+    tool_fn(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
+    result = tool_fn(
+        library_id="lib_demo", ill_request_id="ill_ambiguous", action="commit",
+        chosen_holding_id="hold_2a", rationale="Per ILL-1, specialist converged on Penguin Classics edition.",
+        resolved_via_substitution=True,
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "committed"
+    assert body["resolved_via_substitution"] is True
+    from stacks.hitl.classify import Tier, Workflow
+    assert tier_ledger.get("lib_demo", "ill_request:ill_ambiguous") == (Tier.GREEN, Workflow.ILL_ROUTING)
+
+
 def test_committed_result_carries_requester_patron_id_and_subject_area_for_memory_hook():
     repo = _repo()
     memory = InMemoryMemoryStore()

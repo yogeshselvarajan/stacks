@@ -43,6 +43,22 @@ def test_ill_routing_rejects_unknown_ambiguity_value():
         classify_ill_routing("not_a_real_value", [])
 
 
+def test_ill_routing_convergent_substitution_is_green_even_though_ambiguity_was_multiple_editions():
+    assert classify_ill_routing("multiple_editions", [], resolved_via_substitution=True) is Tier.GREEN
+
+
+def test_ill_routing_still_ambiguous_stays_yellow_regardless_of_the_substitution_flag():
+    assert classify_ill_routing("multiple_editions", [], resolved_via_substitution=False) is Tier.YELLOW
+
+
+def test_ill_routing_sensitivity_flag_overrides_convergent_substitution():
+    assert classify_ill_routing("multiple_editions", [SensitivityFlag.RARE_OR_SPECIAL_COLLECTIONS], resolved_via_substitution=True) is Tier.RED
+
+
+def test_ill_routing_policy_exception_ambiguity_overrides_convergent_substitution():
+    assert classify_ill_routing("policy_exception", [], resolved_via_substitution=True) is Tier.RED
+
+
 @pytest.mark.parametrize(
     "tier_consequence,flags,recalled_hardship,expected",
     [

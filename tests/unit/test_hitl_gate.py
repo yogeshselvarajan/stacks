@@ -218,3 +218,25 @@ def test_unrelated_tool_calls_are_ignored():
     event = _FakeEvent("get_library_data", {"query_type": "room_calendar"})
     hook._gate(event)
     assert event.interrupt_calls == []
+
+
+def test_ill_gate_reads_resolved_via_substitution_from_tool_input_not_evaluation():
+    """The convergence flag is only known at commit time (the specialist
+    runs between evaluate and commit), so the gate must read it from the
+    commit call's own tool_input, not from the cached evaluate() output
+    (which was computed before the specialist ran and cannot contain it)."""
+    hook = _hook_with_ill_cached("multiple_editions", [])
+    event = _FakeEvent(
+        "route_ill_request",
+        {
+            "library_id": "lib_demo",
+            "action": "commit",
+            "ill_request_id": "ill_req_123",
+            "resolved_via_substitution": True,
+        },
+    )
+    hook._gate(event)
+    # A convergent substitution is GREEN -- the gate must not raise an
+    # interrupt.
+    assert event.interrupt_calls == []
+    assert event.cancel_tool is False

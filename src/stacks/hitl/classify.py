@@ -47,30 +47,39 @@ def classify_room_conflict(sensitivity_flags: list[SensitivityFlag]) -> Tier:
     return Tier.RED if sensitivity_flags else Tier.GREEN
 
 
-def classify_ill_routing(ambiguity: str, sensitivity_flags: list[SensitivityFlag]) -> Tier:
-    """ILL routing classification, Plan 1 scope (no specialist yet).
+def classify_ill_routing(
+    ambiguity: str,
+    sensitivity_flags: list[SensitivityFlag],
+    resolved_via_substitution: bool = False,
+) -> Tier:
+    """ILL routing classification.
 
     Per tool_architecture.md section 3.3's Authorization boundary: any
     sensitivity flag is RED (consistent with the fail-closed default in
     classify_room_conflict and classify_overdue_chase). Additionally,
     ambiguity == "policy_exception" is RED regardless of flags. ambiguity
-    == "none" is GREEN (when no flags present). ambiguity == "multiple_editions"
-    is YELLOW at Plan 1 scope -- the ILL Disambiguation Specialist that
-    could resolve this to GREEN via confident convergence is a later plan
-    (agent_architecture.md section 4.3).
+    == "none" is GREEN (when no flags present). ambiguity == "no_match"
+    is classified YELLOW, since nothing auto-routes when no candidate was
+    found and a human should confirm next steps rather than the case
+    silently closing (Plan 1 design decision, not directly specified in
+    the source docs).
 
-    Plan 1 design decision, not directly specified in the source docs:
-    ambiguity == "no_match" is classified YELLOW, since nothing auto-routes
-    when no candidate was found and a human should confirm next steps
-    rather than the case silently closing. Revisit against
-    agent_architecture.md's full classification table before wiring the
-    specialist in a later plan.
+    resolved_via_substitution is new this plan: when the ILL
+    Disambiguation Specialist (docs/architecture/agent_architecture.md
+    section 4.3) converges confidently on a substitute edition, an
+    ambiguity == "multiple_editions" case is treated as GREEN, not YELLOW
+    -- unless a sensitivity flag or a policy_exception ambiguity applies,
+    which stay RED regardless of convergence (agent_architecture.md
+    section 5.3's reconciliation, "unaffected either way"). Defaults False
+    so every Plan 1 call site's behavior is unchanged.
     """
     if sensitivity_flags:
         return Tier.RED
     if ambiguity == "policy_exception":
         return Tier.RED
     if ambiguity == "none":
+        return Tier.GREEN
+    if ambiguity == "multiple_editions" and resolved_via_substitution:
         return Tier.GREEN
     if ambiguity in ("multiple_editions", "no_match"):
         return Tier.YELLOW
