@@ -86,6 +86,65 @@ def test_run_nightly_tier_reuses_the_same_session_across_two_nights():
     assert len(sessions[session_id]["tier_history"]) == 2
 
 
+def test_run_nightly_tier_records_pending_approval_on_interrupt():
+    """Whole-branch review Important 5: run_nightly_tier previously
+    recorded only str(getattr(result, "message", result)) into
+    tier_history, discarding stop_reason and result.interrupts entirely.
+    A YELLOW/RED-tier escalation reaching a HITL interrupt looked
+    identical in tier_history to a cleanly completed run, with no visible
+    signal that a human needs to act. Verifies stop_reason and
+    interrupt_ids land in tier_history, and pending_approval lands in the
+    return dict, when the agent returns an interrupted AgentResult."""
+    session_manager_cls, sessions = _fake_session_manager_factory()
+
+    fake_interrupt = SimpleNamespace(id="hitl:run_overdue_chase:circ_1")
+    agent = MagicMock()
+    agent.return_value = SimpleNamespace(
+        message="Escalation for circ_1 is pending human approval.",
+        stop_reason="interrupt",
+        interrupts=[fake_interrupt],
+    )
+
+    sequencer = OverdueSequencer(
+        bucket="unused-in-this-test", region="us-west-2",
+        agent_factory=lambda session_id: agent,
+        session_manager_factory=session_manager_cls,
+    )
+
+    result = sequencer.run_nightly_tier("circ_1", "lib_demo")
+
+    assert result["pending_approval"] is True
+    session_id = "overdue:lib_demo:circ_1"
+    recorded = sessions[session_id]["tier_history"][-1]
+    assert recorded["stop_reason"] == "interrupt"
+    assert recorded["interrupt_ids"] == ["hitl:run_overdue_chase:circ_1"]
+
+
+def test_run_nightly_tier_records_no_pending_approval_on_clean_completion():
+    """The counterpart to the interrupt test above -- a normal completion
+    (no stop_reason attribute, no interrupts) must not be mistaken for a
+    pending-approval case."""
+    session_manager_cls, sessions = _fake_session_manager_factory()
+    agent = MagicMock()
+    agent.return_value = MagicMock(message="ok")
+    del agent.return_value.stop_reason  # ensure getattr falls back to None
+    del agent.return_value.interrupts
+
+    sequencer = OverdueSequencer(
+        bucket="unused-in-this-test", region="us-west-2",
+        agent_factory=lambda session_id: agent,
+        session_manager_factory=session_manager_cls,
+    )
+
+    result = sequencer.run_nightly_tier("circ_1", "lib_demo")
+
+    assert result["pending_approval"] is False
+    session_id = "overdue:lib_demo:circ_1"
+    recorded = sessions[session_id]["tier_history"][-1]
+    assert recorded["stop_reason"] is None
+    assert recorded["interrupt_ids"] == []
+
+
 def test_session_id_is_library_scoped_so_two_libraries_never_collide():
     session_manager_cls, sessions = _fake_session_manager_factory()
     agent = MagicMock()

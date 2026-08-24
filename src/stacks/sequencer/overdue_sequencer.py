@@ -114,9 +114,26 @@ class OverdueSequencer:
         )
         result = agent(prompt)
 
+        # A YELLOW/RED-tier escalation returns an AgentResult with
+        # stop_reason == "interrupt" and populated result.interrupts,
+        # rather than completing the commit. Recording only the
+        # stringified message (as this file previously did) made a case
+        # genuinely pending human approval look identical in tier_history
+        # to one that completed cleanly -- so the next night's invocation
+        # would silently re-attempt the same tier with no visible signal
+        # that a human needs to act first (whole-branch review Important
+        # 5). This does not build the full resume path (a later plan's
+        # scope) -- it only makes the pending state observable.
+        stop_reason = getattr(result, "stop_reason", None)
+        interrupts = getattr(result, "interrupts", None) or []
+        interrupt_ids = [getattr(i, "id", i) for i in interrupts]
+        pending_approval = stop_reason == "interrupt"
+
         tier_history.append({
             "run_at": datetime.now(timezone.utc).isoformat(),
             "agent_message": str(getattr(result, "message", result)),
+            "stop_reason": stop_reason,
+            "interrupt_ids": interrupt_ids,
         })
 
         session_agent = SessionAgent(
@@ -134,4 +151,5 @@ class OverdueSequencer:
             "library_id": library_id,
             "session_id": session_id,
             "tier_history_length": len(tier_history),
+            "pending_approval": pending_approval,
         }
