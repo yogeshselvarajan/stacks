@@ -6,7 +6,7 @@ trigger conditions this implements.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from strands.hooks import AfterToolCallEvent, HookProvider, HookRegistry
@@ -65,7 +65,7 @@ class MemoryEventHook(HookProvider):
         patron_id = result_json.get("patron_id")
         if not patron_id:
             return
-        self._store.record_hardship_flag(self._library_id, patron_id, flagged_at=datetime.now())
+        self._store.record_hardship_flag(self._library_id, patron_id, flagged_at=datetime.now(timezone.utc))
 
 
 def _extract_result_json(result: dict[str, Any]) -> dict[str, Any] | None:

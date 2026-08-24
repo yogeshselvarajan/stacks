@@ -243,3 +243,78 @@ def test_committed_result_carries_patron_id_and_hitl_tier_for_memory_hook():
     body = result["content"][0]["json"]
     assert body["patron_id"] == "patron_overdue_1"
     assert body["hitl_tier"] == "GREEN"
+
+
+def test_hardship_recency_window_works_end_to_end_through_the_real_hook_and_tool():
+    """Regression test for the naive/aware datetime mismatch (whole-branch
+    review Important 2). MemoryEventHook._record_hardship_flag used to
+    write flagged_at=datetime.now() (timezone-naive), while this tool read
+    it back and computed (now() - fact.flagged_at) where now() is
+    timezone-aware -- raising TypeError, silently swallowed by this
+    file's own fail-closed except Exception clause, which made
+    has_recalled_hardship_history always True regardless of the fact's
+    age. Neither Task 7's hook tests (fake store) nor Task 8's tool tests
+    (facts seeded with already-aware datetimes directly) ever exercised
+    the real write-then-read path, so this test writes a hardship fact
+    through the REAL MemoryEventHook and reads it back through the REAL
+    run_overdue_chase tool."""
+    from datetime import timedelta
+    from unittest.mock import MagicMock
+
+    from stacks.data.models import CirculationRecord
+    from stacks.hooks.memory_event import MemoryEventHook
+    from stacks.types import SensitivityFlag
+
+    repo = _repo()
+    memory = InMemoryMemoryStore()
+    hook = MemoryEventHook(memory, library_id="lib_demo")
+
+    repo.save_circulation_record(CirculationRecord(
+        circulation_record_id="circ_hardship_e2e", library_id="lib_demo",
+        patron_id="patron_hardship_e2e", item_id="item_hardship_e2e", item_type="book",
+        due_date=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        prior_reminder_tier_sent=3,
+        flags=[SensitivityFlag.HARDSHIP_PATTERN],
+    ))
+
+    write_tool_fn = make_run_overdue_chase(
+        repo, EvaluationCache(), TierLedger(), "lib_demo",
+        now=lambda: datetime(2026, 9, 5, tzinfo=timezone.utc), memory=memory,
+    )
+    write_tool_fn(library_id="lib_demo", circulation_record_id="circ_hardship_e2e", action="evaluate")
+    commit_result = write_tool_fn(
+        library_id="lib_demo", circulation_record_id="circ_hardship_e2e", action="commit",
+        message_body="Escalation per OD-1.",
+        approval_token={"token": "t", "approver_role": "librarian_case_review", "related_action_id": "overdue:circ_hardship_e2e"},
+    )
+    assert commit_result["content"][0]["json"]["status"] == "committed"
+
+    # Feed the tool's own real commit result through the REAL hook (real
+    # datetime.now(timezone.utc) write, no fake store, no pre-seeded fact).
+    event = MagicMock()
+    event.tool_use = {
+        "name": "run_overdue_chase",
+        "input": {"library_id": "lib_demo", "circulation_record_id": "circ_hardship_e2e", "action": "commit"},
+    }
+    event.exception = None
+    event.result = commit_result
+    hook._record(event)
+
+    # A `now` just 10 days after the real write is well within the
+    # 365-day recency window -- must not raise, must recall the fact.
+    read_within_window = make_run_overdue_chase(
+        repo, EvaluationCache(), TierLedger(), "lib_demo",
+        now=lambda: datetime.now(timezone.utc) + timedelta(days=10), memory=memory,
+    )
+    result_within = read_within_window(library_id="lib_demo", circulation_record_id="circ_hardship_e2e", action="evaluate")
+    assert result_within["content"][0]["json"]["has_recalled_hardship_history"] is True
+
+    # A `now` 400 days after the real write is outside the window --
+    # before the fix, the naive/aware TypeError meant this always came
+    # back True regardless of age; it must now correctly come back False.
+    read_outside_window = make_run_overdue_chase(
+        repo, EvaluationCache(), TierLedger(), "lib_demo",
+        now=lambda: datetime.now(timezone.utc) + timedelta(days=400), memory=memory,
+    )
+    result_outside = read_outside_window(library_id="lib_demo", circulation_record_id="circ_hardship_e2e", action="evaluate")
+    assert result_outside["content"][0]["json"]["has_recalled_hardship_history"] is False
