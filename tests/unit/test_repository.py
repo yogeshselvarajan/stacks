@@ -55,3 +55,23 @@ def test_policy_clauses_are_seeded_for_all_three_policies():
         clauses = repo.get_policy_clauses("lib_demo", policy_name)
         assert len(clauses) >= 1
         assert clauses[0].clause_id
+
+
+def test_cancelled_booking_does_not_participate_in_a_later_overlap_query():
+    from stacks.data.models import BookingStatus
+
+    repo = InMemoryLibraryDataRepository()
+    booking = BookingRecord(
+        booking_id="b_cancel_test", library_id="lib_demo", room_id="room_a",
+        start=datetime(2026, 9, 10, tzinfo=timezone.utc), end=datetime(2026, 9, 10, 1, tzinfo=timezone.utc),
+        booked_by="patron_1", booking_type=BookingType.WALK_IN,
+    )
+    repo.save_booking(booking)
+    booking.status = BookingStatus.CANCELLED
+    repo.save_booking(booking)
+
+    bookings = repo.get_bookings_for_room(
+        "lib_demo", "room_a",
+        datetime(2026, 9, 10, tzinfo=timezone.utc), datetime(2026, 9, 10, 2, tzinfo=timezone.utc),
+    )
+    assert bookings == []

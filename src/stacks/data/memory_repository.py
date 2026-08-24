@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from stacks.data.models import BookingRecord, CatalogCandidate, CirculationRecord, ILLRequestRecord
+from stacks.data.models import BookingRecord, BookingStatus, CatalogCandidate, CirculationRecord, ILLRequestRecord
 from stacks.types import BookingId, CirculationRecordId, ILLRequestId, LibraryId, PolicyClauseRef
 
 
@@ -22,7 +22,8 @@ class InMemoryLibraryDataRepository:
     ) -> list[BookingRecord]:
         return [
             b for (lib, _), b in self._bookings.items()
-            if lib == library_id and b.room_id == room_id and b.start < end and start < b.end
+            if lib == library_id and b.room_id == room_id and b.status != BookingStatus.CANCELLED
+            and b.start < end and start < b.end
         ]
 
     def get_booking(self, library_id: LibraryId, booking_id: BookingId) -> BookingRecord | None:

@@ -8,7 +8,7 @@ from typing import Any
 
 from strands import tool
 
-from stacks.data.models import BookingRecord
+from stacks.data.models import BookingRecord, BookingStatus
 from stacks.data.repository import LibraryDataRepository
 from stacks.hitl.classify import Workflow, classify_room_conflict, is_approval_valid
 from stacks.hitl.evaluation_cache import EvaluationCache
@@ -175,5 +175,6 @@ def _rank_resolutions(bookings: list[BookingRecord], clause_id: str) -> list[dic
 
 
 def _apply_yield(booking: BookingRecord) -> BookingRecord:
+    booking.status = BookingStatus.CANCELLED
     booking.notes = (booking.notes + " [yielded per priority policy]").strip()
     return booking

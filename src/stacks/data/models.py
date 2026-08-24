@@ -29,6 +29,12 @@ class BookingType(str, enum.Enum):
     WALK_IN = "walk_in"
 
 
+class BookingStatus(str, enum.Enum):
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+    PENDING_CONFLICT = "pending_conflict"
+
+
 class BookingRecord(BaseModel):
     booking_id: BookingId
     library_id: LibraryId
@@ -37,6 +43,7 @@ class BookingRecord(BaseModel):
     end: datetime
     booked_by: PatronId
     booking_type: BookingType
+    status: BookingStatus = BookingStatus.CONFIRMED
     flags: list[SensitivityFlag] = Field(default_factory=list)
     notes: str = ""
 

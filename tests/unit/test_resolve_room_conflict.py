@@ -8,9 +8,15 @@ from stacks.hitl.tier_ledger import TierLedger
 from stacks.tools.resolve_room_conflict import make_resolve_room_conflict
 
 
-def _build():
+def _repo_with_green_conflict():
+    """Fixture helper: return a repo with the green room_a conflict seeded."""
     repo = InMemoryLibraryDataRepository()
     seed_demo_library(repo, library_id="lib_demo")
+    return repo
+
+
+def _build():
+    repo = _repo_with_green_conflict()
     cache = EvaluationCache()
     tier_ledger = TierLedger()
     tool_fn = make_resolve_room_conflict(repo, cache, tier_ledger, "lib_demo")
@@ -489,3 +495,23 @@ def test_three_fully_tied_bookings_no_self_referential_candidate():
     # Verify all 3 bookings appear as yielders
     yielders = set([c["booking_id_that_yields"] for c in body["candidate_resolutions"]])
     assert yielders == {"b_3full_1", "b_3full_2", "b_3full_3"}
+
+
+def test_committed_resolution_cancels_the_yielding_booking():
+    from stacks.data.models import BookingStatus
+
+    repo = _repo_with_green_conflict()
+    tool_fn = make_resolve_room_conflict(repo, EvaluationCache(), TierLedger(), "lib_demo")
+    tool_fn(library_id="lib_demo", action="evaluate", conflicting_booking_ids=["b_oneoff_a", "b_recurring_a"])
+    result = tool_fn(
+        library_id="lib_demo", action="commit",
+        conflicting_booking_ids=["b_oneoff_a", "b_recurring_a"],
+        chosen_resolution_booking_id="b_oneoff_a",
+        rationale="Per RBP-1, recurring program outranks one-off renter.",
+    )
+    assert result["content"][0]["json"]["status"] == "committed"
+
+    yielded = repo.get_booking("lib_demo", "b_oneoff_a")
+    assert yielded.status == BookingStatus.CANCELLED
+    kept = repo.get_booking("lib_demo", "b_recurring_a")
+    assert kept.status == BookingStatus.CONFIRMED
