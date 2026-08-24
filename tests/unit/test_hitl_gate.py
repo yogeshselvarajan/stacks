@@ -45,11 +45,11 @@ def _hook_with_room_conflict_cached(sensitivity_flags):
         "candidate_resolutions": [{"booking_id_that_yields": "b1", "booking_id_that_keeps": "b2", "deterministic_score": 1.0, "rule_applied": "RBP-1"}],
         "tie": False,
     })
-    hook = HitlGateHook(cache, EvaluationCache(), EvaluationCache())
+    hook = HitlGateHook(cache, EvaluationCache(), EvaluationCache(), EvaluationCache())
     return hook
 
 
-def _hook_with_ill_cached(ambiguity, sensitivity_flags):
+def _hook_with_ill_cached(ambiguity, sensitivity_flags, disambiguation_cache=None):
     cache = EvaluationCache()
     cache.put("lib_demo", "ill_req_123", {
         "ill_request_id": "ill_req_123",
@@ -58,7 +58,7 @@ def _hook_with_ill_cached(ambiguity, sensitivity_flags):
         "applicable_policy_clause": {"policy_name": "ill_routing_policy", "clause_id": "IRP-1", "clause_text": "..."},
         "candidate_routes": [{"destination_library": "library_a", "estimated_wait": 5}],
     })
-    hook = HitlGateHook(EvaluationCache(), cache, EvaluationCache())
+    hook = HitlGateHook(EvaluationCache(), cache, EvaluationCache(), disambiguation_cache or EvaluationCache())
     return hook
 
 
@@ -195,7 +195,7 @@ def test_green_tied_room_conflict_still_raises_interrupt():
         ],
         "tie": True,
     })
-    hook = HitlGateHook(cache, EvaluationCache(), EvaluationCache())
+    hook = HitlGateHook(cache, EvaluationCache(), EvaluationCache(), EvaluationCache())
     event = _FakeEvent("resolve_room_conflict", {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
     with pytest.raises(InterruptException):
         hook._gate(event)
@@ -220,12 +220,18 @@ def test_unrelated_tool_calls_are_ignored():
     assert event.interrupt_calls == []
 
 
-def test_ill_gate_reads_resolved_via_substitution_from_tool_input_not_evaluation():
+def test_ill_gate_green_when_specialist_convergence_is_verified_in_cache():
     """The convergence flag is only known at commit time (the specialist
-    runs between evaluate and commit), so the gate must read it from the
-    commit call's own tool_input, not from the cached evaluate() output
-    (which was computed before the specialist ran and cannot contain it)."""
-    hook = _hook_with_ill_cached("multiple_editions", [])
+    runs between evaluate and commit), so the gate reads the raw claim
+    from the commit call's own tool_input -- but only acts on it once
+    verified against the disambiguation cache holding a matching,
+    confident, non-ambiguous specialist result for this exact case and
+    chosen holding (whole-branch review Critical 1)."""
+    disambiguation_cache = EvaluationCache()
+    disambiguation_cache.put("lib_demo", "ill_req_123", {
+        "narrowed_candidate_id": "hold_2a", "confidence": 0.9, "still_ambiguous": False,
+    })
+    hook = _hook_with_ill_cached("multiple_editions", [], disambiguation_cache=disambiguation_cache)
     event = _FakeEvent(
         "route_ill_request",
         {
@@ -237,10 +243,37 @@ def test_ill_gate_reads_resolved_via_substitution_from_tool_input_not_evaluation
         },
     )
     hook._gate(event)
-    # A convergent substitution with an actual chosen holding is GREEN --
-    # the gate must not raise an interrupt.
+    # A verified convergent substitution with an actual chosen holding is
+    # GREEN -- the gate must not raise an interrupt.
     assert event.interrupt_calls == []
     assert event.cancel_tool is False
+
+
+def test_ill_gate_yellow_interrupt_when_resolved_via_substitution_claimed_without_specialist_cache():
+    """CRITICAL regression test (whole-branch review Critical 1).
+    Demonstrated exploitable during review: an ambiguous ILL request
+    (ambiguity="multiple_editions") could be committed with
+    resolved_via_substitution=True and a chosen holding id, auto-routing
+    at GREEN with NO human approval and NO call to
+    disambiguate_ill_candidates ever having happened -- the model simply
+    asserted the flag. With no corresponding disambiguation_cache entry
+    for this ill_request_id, the gate must now interrupt at YELLOW, not
+    return early at GREEN."""
+    hook = _hook_with_ill_cached("multiple_editions", [])
+    event = _FakeEvent(
+        "route_ill_request",
+        {
+            "library_id": "lib_demo",
+            "action": "commit",
+            "ill_request_id": "ill_req_123",
+            "chosen_holding_id": "hold_2a",
+            "resolved_via_substitution": True,
+        },
+    )
+    with pytest.raises(InterruptException):
+        hook._gate(event)
+    assert len(event.interrupt_calls) == 1
+    assert event.interrupt_calls[0][1]["tier"] == "YELLOW"
 
 
 def test_ill_gate_no_holding_with_resolved_via_substitution_true_is_not_green():

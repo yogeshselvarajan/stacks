@@ -6,6 +6,13 @@ from the ILL Disambiguation Specialist's own ILLDisambiguationResult
 converged "multiple_editions" case commit at GREEN instead of YELLOW (see
 classify_ill_routing). See docs/architecture/tool_architecture.md
 section 3.3.
+
+This flag is never trusted as the model passed it: commit verifies it
+against disambiguation_cache, the code-held record of the specialist's
+own convergence result, via stacks.hitl.ill_disambiguation_verification.
+A claim with no corresponding cache entry (disambiguate_ill_candidates
+was never called for this case) is always reduced to False (whole-branch
+review Critical 1).
 """
 from __future__ import annotations
 
@@ -17,6 +24,7 @@ from stacks.data.models import ILLRequestStatus
 from stacks.data.repository import LibraryDataRepository
 from stacks.hitl.classify import Workflow, classify_ill_routing, is_approval_valid
 from stacks.hitl.evaluation_cache import EvaluationCache
+from stacks.hitl.ill_disambiguation_verification import verify_resolved_via_substitution
 from stacks.hitl.tier_ledger import TierLedger
 from stacks.memory.store import MemoryStore
 from stacks.types import ApprovalToken, SensitivityFlag
@@ -28,6 +36,7 @@ def make_route_ill_request(
     tier_ledger: TierLedger,
     session_library_id: str,
     memory: MemoryStore,
+    disambiguation_cache: EvaluationCache,
 ):
     @tool
     def route_ill_request(
@@ -56,7 +65,10 @@ def make_route_ill_request(
                 chosen_holding_id for an originally "multiple_editions"
                 case. The agent sets this based on the specialist's own
                 ILLDisambiguationResult -- never invented independently of
-                that result.
+                that result. This claim is verified, not trusted: it only
+                takes effect when disambiguation_cache actually holds a
+                matching convergence record from a real
+                disambiguate_ill_candidates call for this ill_request_id.
             approval_token: commit-only for YELLOW/RED-classified cases.
 
         Returns:
@@ -115,15 +127,24 @@ def make_route_ill_request(
             # "Resolved via substitution" is definitionally a claim about
             # having converged on a specific holding -- a commit with no
             # chosen_holding_id (a no-match outcome) can never honestly be
-            # "resolved", regardless of what the caller passed. Computed
-            # once, up front, and used consistently for both tier
-            # classification and every returned resolved_via_substitution
-            # field below, so no branch can ever report True when nothing
-            # was actually substituted. Without this guard,
-            # resolved_via_substitution=True with chosen_holding_id=None
-            # would classify at GREEN and let an ambiguous request close
-            # as NO_MATCH with no approval token and no human ever asked.
-            effective_resolved_via_substitution = resolved_via_substitution and chosen_holding_id is not None
+            # "resolved", regardless of what the caller passed. It is also
+            # never trusted from the caller's bare claim alone: it is only
+            # True when disambiguation_cache actually holds the ILL
+            # Disambiguation Specialist's own convergence record for this
+            # exact (library_id, ill_request_id), confidently pointing at
+            # this exact chosen_holding_id (whole-branch review Critical
+            # 1 -- see stacks.hitl.ill_disambiguation_verification for the
+            # full rule). Computed once, up front, and used consistently
+            # for both tier classification and every returned
+            # resolved_via_substitution field below, so no branch can ever
+            # report True when nothing was actually, verifiably
+            # substituted. Without the cache check, resolved_via_substitution=True
+            # with a chosen_holding_id but no preceding disambiguate_ill_candidates
+            # call would classify at GREEN purely on the model's own
+            # unverified claim, with no human ever asked.
+            effective_resolved_via_substitution = verify_resolved_via_substitution(
+                disambiguation_cache, library_id, ill_request_id, chosen_holding_id, resolved_via_substitution,
+            )
 
             valid_ids = {c["holding_id"] for c in evaluation["candidate_matches"]}
             if chosen_holding_id is not None and chosen_holding_id not in valid_ids:

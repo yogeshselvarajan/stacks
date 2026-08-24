@@ -19,8 +19,21 @@ def _build():
     repo = _repo()
     cache = EvaluationCache()
     tier_ledger = TierLedger()
-    tool_fn = make_route_ill_request(repo, cache, tier_ledger, "lib_demo", InMemoryMemoryStore())
+    disambiguation_cache = EvaluationCache()
+    tool_fn = make_route_ill_request(repo, cache, tier_ledger, "lib_demo", InMemoryMemoryStore(), disambiguation_cache)
     return tool_fn, repo, tier_ledger
+
+
+def _build_with_disambiguation_cache():
+    """Like _build(), but also returns the ILL Disambiguation Specialist's
+    convergence cache, for tests that need to simulate a real prior
+    disambiguate_ill_candidates call (whole-branch review Critical 1)."""
+    repo = _repo()
+    cache = EvaluationCache()
+    tier_ledger = TierLedger()
+    disambiguation_cache = EvaluationCache()
+    tool_fn = make_route_ill_request(repo, cache, tier_ledger, "lib_demo", InMemoryMemoryStore(), disambiguation_cache)
+    return tool_fn, repo, tier_ledger, disambiguation_cache
 
 
 def test_evaluate_unambiguous_request():
@@ -194,7 +207,7 @@ def test_cross_tenant_catalog_isolation():
 
     cache = EvaluationCache()
     tier_ledger = TierLedger()
-    tool_fn_a = make_route_ill_request(repo, cache, tier_ledger, "lib_a", InMemoryMemoryStore())
+    tool_fn_a = make_route_ill_request(repo, cache, tier_ledger, "lib_a", InMemoryMemoryStore(), EvaluationCache())
 
     # Evaluate lib_a's request, it should only see hold_a
     result = tool_fn_a(library_id="lib_a", ill_request_id="ill_shared_a", action="evaluate")
@@ -211,7 +224,7 @@ def test_evaluate_returns_recalled_requester_pattern_when_present():
         has_accepted_substitution_without_escalation=True,
         last_updated=datetime(2026, 7, 1, tzinfo=timezone.utc),
     ))
-    tool_fn = make_route_ill_request(repo, EvaluationCache(), TierLedger(), "lib_demo", memory)
+    tool_fn = make_route_ill_request(repo, EvaluationCache(), TierLedger(), "lib_demo", memory, EvaluationCache())
 
     result = tool_fn(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
     body = result["content"][0]["json"]
@@ -225,15 +238,65 @@ def test_evaluate_fails_open_on_memory_retrieval_error():
         def get_ill_substitution_pattern(self, library_id, requester_key):
             raise RuntimeError("simulated retrieval failure")
 
-    tool_fn = make_route_ill_request(repo, EvaluationCache(), TierLedger(), "lib_demo", RaisingMemory())
+    tool_fn = make_route_ill_request(repo, EvaluationCache(), TierLedger(), "lib_demo", RaisingMemory(), EvaluationCache())
     result = tool_fn(library_id="lib_demo", ill_request_id="ill_unambiguous", action="evaluate")
     assert result["status"] == "success"
     assert result["content"][0]["json"]["requester_pattern"] is None
 
 
-def test_commit_with_resolved_via_substitution_true_is_green_without_approval_token():
-    tool_fn, _, tier_ledger = _build()
+def test_commit_resolved_via_substitution_without_specialist_cache_is_not_green():
+    """CRITICAL regression test (whole-branch review Critical 1). Before
+    this fix, a claimed resolved_via_substitution=True with NO prior
+    disambiguate_ill_candidates call for this ill_request_id classified
+    GREEN and committed with no approval token and no human ever asked --
+    the model's own unverified claim was the only thing gating a
+    YELLOW-tier "multiple_editions" case. It must now classify YELLOW and
+    be blocked without an approval token, exactly as if
+    resolved_via_substitution had never been claimed at all."""
+    tool_fn, repo, tier_ledger = _build()
     tool_fn(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
+    result = tool_fn(
+        library_id="lib_demo", ill_request_id="ill_ambiguous", action="commit",
+        chosen_holding_id="hold_2a", rationale="Per ILL-1, specialist converged on Penguin Classics edition.",
+        resolved_via_substitution=True,
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "blocked_missing_approval"
+    assert body["resolved_via_substitution"] is False
+    from stacks.hitl.classify import Tier, Workflow
+    assert tier_ledger.get("lib_demo", "ill_request:ill_ambiguous") is None
+    assert repo.get_ill_request("lib_demo", "ill_ambiguous").status.value == "open"
+
+
+def test_commit_resolved_via_substitution_without_specialist_cache_succeeds_with_yellow_approval():
+    """Same claim as the exploit test above, but with a valid YELLOW-tier
+    approval token -- confirms the effective tier really is YELLOW (not an
+    unreachable GREEN, not RED) when the specialist never actually ran."""
+    tool_fn, repo, tier_ledger = _build()
+    tool_fn(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
+    result = tool_fn(
+        library_id="lib_demo", ill_request_id="ill_ambiguous", action="commit",
+        chosen_holding_id="hold_2a", rationale="Per ILL-1, specialist converged on Penguin Classics edition.",
+        resolved_via_substitution=True,
+        approval_token={"token": "t", "approver_role": "ill_coordinator", "related_action_id": "ill_request:ill_ambiguous"},
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "committed"
+    assert body["resolved_via_substitution"] is False
+    from stacks.hitl.classify import Tier, Workflow
+    assert tier_ledger.get("lib_demo", "ill_request:ill_ambiguous") == (Tier.YELLOW, Workflow.ILL_ROUTING)
+
+
+def test_commit_resolved_via_substitution_with_verified_specialist_convergence_is_green():
+    """Positive path: a genuine specialist convergence recorded in the
+    disambiguation cache (as disambiguate_ill_candidates itself would
+    write it), followed by a matching commit, does classify GREEN without
+    requiring an approval token."""
+    tool_fn, repo, tier_ledger, disambiguation_cache = _build_with_disambiguation_cache()
+    tool_fn(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
+    disambiguation_cache.put("lib_demo", "ill_ambiguous", {
+        "narrowed_candidate_id": "hold_2a", "confidence": 0.92, "still_ambiguous": False,
+    })
     result = tool_fn(
         library_id="lib_demo", ill_request_id="ill_ambiguous", action="commit",
         chosen_holding_id="hold_2a", rationale="Per ILL-1, specialist converged on Penguin Classics edition.",
@@ -244,6 +307,44 @@ def test_commit_with_resolved_via_substitution_true_is_green_without_approval_to
     assert body["resolved_via_substitution"] is True
     from stacks.hitl.classify import Tier, Workflow
     assert tier_ledger.get("lib_demo", "ill_request:ill_ambiguous") == (Tier.GREEN, Workflow.ILL_ROUTING)
+
+
+def test_commit_resolved_via_substitution_with_cache_pointing_at_different_candidate_is_not_green():
+    """A cached specialist convergence for a DIFFERENT candidate than the
+    one actually being committed must not verify -- the specialist
+    converging on hold_2b never authorizes committing hold_2a at GREEN."""
+    tool_fn, repo, tier_ledger, disambiguation_cache = _build_with_disambiguation_cache()
+    tool_fn(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
+    disambiguation_cache.put("lib_demo", "ill_ambiguous", {
+        "narrowed_candidate_id": "hold_2b", "confidence": 0.95, "still_ambiguous": False,
+    })
+    result = tool_fn(
+        library_id="lib_demo", ill_request_id="ill_ambiguous", action="commit",
+        chosen_holding_id="hold_2a", rationale="Per ILL-1, specialist converged on Penguin Classics edition.",
+        resolved_via_substitution=True,
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "blocked_missing_approval"
+    assert body["resolved_via_substitution"] is False
+
+
+def test_commit_resolved_via_substitution_with_low_confidence_cache_entry_is_not_green():
+    """A cached specialist result below MIN_SUBSTITUTION_CONFIDENCE must
+    not verify, even if it names the correct candidate and is not
+    still_ambiguous."""
+    tool_fn, repo, tier_ledger, disambiguation_cache = _build_with_disambiguation_cache()
+    tool_fn(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
+    disambiguation_cache.put("lib_demo", "ill_ambiguous", {
+        "narrowed_candidate_id": "hold_2a", "confidence": 0.4, "still_ambiguous": False,
+    })
+    result = tool_fn(
+        library_id="lib_demo", ill_request_id="ill_ambiguous", action="commit",
+        chosen_holding_id="hold_2a", rationale="Per ILL-1, specialist converged on Penguin Classics edition.",
+        resolved_via_substitution=True,
+    )
+    body = result["content"][0]["json"]
+    assert body["status"] == "blocked_missing_approval"
+    assert body["resolved_via_substitution"] is False
 
 
 def test_commit_no_holding_with_resolved_via_substitution_true_is_blocked_not_green():
@@ -294,7 +395,7 @@ def test_commit_no_holding_with_resolved_via_substitution_true_succeeds_with_yel
 def test_committed_result_carries_requester_patron_id_and_subject_area_for_memory_hook():
     repo = _repo()
     memory = InMemoryMemoryStore()
-    tool_fn = make_route_ill_request(repo, EvaluationCache(), TierLedger(), "lib_demo", memory)
+    tool_fn = make_route_ill_request(repo, EvaluationCache(), TierLedger(), "lib_demo", memory, EvaluationCache())
     tool_fn(library_id="lib_demo", ill_request_id="ill_unambiguous", action="evaluate")
     result = tool_fn(
         library_id="lib_demo", ill_request_id="ill_unambiguous", action="commit",

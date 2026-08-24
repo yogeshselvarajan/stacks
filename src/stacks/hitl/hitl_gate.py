@@ -19,6 +19,7 @@ from stacks.hitl.classify import (
     is_approval_valid,
 )
 from stacks.hitl.evaluation_cache import EvaluationCache
+from stacks.hitl.ill_disambiguation_verification import verify_resolved_via_substitution
 from stacks.types import SensitivityFlag
 
 # Tool names whose "commit" action is HITL-gated, and which workflow
@@ -46,12 +47,21 @@ class HitlGateHook(HookProvider):
         room_conflict_cache: EvaluationCache,
         ill_cache: EvaluationCache,
         overdue_cache: EvaluationCache,
+        ill_disambiguation_cache: EvaluationCache,
     ) -> None:
         self._caches: dict[Workflow, EvaluationCache] = {
             Workflow.ROOM_BOOKING: room_conflict_cache,
             Workflow.ILL_ROUTING: ill_cache,
             Workflow.OVERDUE_CHASE: overdue_cache,
         }
+        # Shared with agent.py's wiring of disambiguate_ill_candidates and
+        # route_ill_request, the same way the three caches above are
+        # already shared -- the code-held record of the ILL Disambiguation
+        # Specialist's own convergence result, used by
+        # _classify_from_evaluation to verify a commit's
+        # resolved_via_substitution claim instead of trusting it
+        # (whole-branch review Critical 1).
+        self._ill_disambiguation_cache = ill_disambiguation_cache
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeToolCallEvent, self._gate)
@@ -77,7 +87,7 @@ class HitlGateHook(HookProvider):
                 event.cancel_tool = "blocked_missing_evaluation"
                 return
 
-            tier = _classify_from_evaluation(workflow, evaluation, tool_input)
+            tier = _classify_from_evaluation(workflow, evaluation, tool_input, self._ill_disambiguation_cache)
             # A genuinely tied ROOM_BOOKING case requires an approval token
             # from the tool itself regardless of tier (resolve_room_conflict's
             # own fix) -- so a tied GREEN case must still fall through to the
@@ -141,28 +151,35 @@ def _related_action_id_for(workflow: Workflow, case_id: str) -> str:
 
 
 def _classify_from_evaluation(
-    workflow: Workflow, evaluation: dict[str, Any], tool_input: dict[str, Any] | None = None
+    workflow: Workflow,
+    evaluation: dict[str, Any],
+    tool_input: dict[str, Any] | None = None,
+    ill_disambiguation_cache: EvaluationCache | None = None,
 ) -> Tier:
     sensitivity_flags = [SensitivityFlag(f) for f in evaluation["sensitivity_flags"]]
     if workflow is Workflow.ROOM_BOOKING:
         return classify_room_conflict(sensitivity_flags)
     if workflow is Workflow.ILL_ROUTING:
         # resolved_via_substitution is only known at commit time (the
-        # specialist runs between evaluate and commit), so it is read from
-        # the commit call's own tool_input, never from the cached
-        # evaluation, which was computed before the specialist ran.
+        # specialist runs between evaluate and commit), so its raw claim
+        # is read from the commit call's own tool_input, never from the
+        # cached evaluation, which was computed before the specialist ran.
         #
-        # "Resolved via substitution" is definitionally a claim about
-        # having converged on a specific holding -- a commit with no
-        # chosen_holding_id (a no-match outcome) can never honestly be
-        # "resolved", regardless of the caller's flag. This mirrors
-        # route_ill_request's own effective_resolved_via_substitution
-        # guard exactly: both sites must agree, or the gate and the tool
-        # disagree about the tier.
+        # The raw claim is never trusted on its own: it is verified
+        # against ill_disambiguation_cache, the code-held record of the
+        # specialist's own convergence result, via
+        # verify_resolved_via_substitution -- the exact same function
+        # route_ill_request's own commit path calls, so the gate and the
+        # tool can never disagree about the tier (whole-branch review
+        # Critical 1). No cache entry (disambiguate_ill_candidates was
+        # never called for this case) always reduces to False.
         ill_tool_input = tool_input or {}
-        resolved_via_substitution = (
-            bool(ill_tool_input.get("resolved_via_substitution"))
-            and ill_tool_input.get("chosen_holding_id") is not None
+        resolved_via_substitution = verify_resolved_via_substitution(
+            ill_disambiguation_cache,
+            ill_tool_input.get("library_id"),
+            evaluation.get("ill_request_id") or ill_tool_input.get("ill_request_id"),
+            ill_tool_input.get("chosen_holding_id"),
+            bool(ill_tool_input.get("resolved_via_substitution")),
         )
         return classify_ill_routing(evaluation["ambiguity"], sensitivity_flags, resolved_via_substitution)
     if workflow is Workflow.OVERDUE_CHASE:

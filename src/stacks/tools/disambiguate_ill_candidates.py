@@ -35,6 +35,7 @@ from pydantic import BaseModel
 from strands import Agent, tool
 
 from stacks.data.repository import LibraryDataRepository
+from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.tools.get_library_data import make_get_library_data
 from stacks.tools.search_ill_catalog_candidates import make_search_ill_catalog_candidates
 
@@ -66,7 +67,12 @@ def _validate_narrowed_candidate(candidate_id: str | None, candidate_ids: set[st
         raise ValueError(f"specialist returned a candidate outside the case's own set: {candidate_id!r}")
 
 
-def make_disambiguate_ill_candidates(repo: LibraryDataRepository, session_library_id: str, model):
+def make_disambiguate_ill_candidates(
+    repo: LibraryDataRepository,
+    session_library_id: str,
+    model,
+    disambiguation_cache: EvaluationCache,
+):
     @tool
     def disambiguate_ill_candidates(
         library_id: str,
@@ -78,6 +84,14 @@ def make_disambiguate_ill_candidates(repo: LibraryDataRepository, session_librar
         set of candidate catalog matches to a single confident candidate,
         or a definitive no-confident-match state. Never itself HITL-gated
         -- no commit/send semantics, no approval_token field.
+
+        On success, writes its own result into disambiguation_cache keyed
+        (library_id, ill_request_id) -- this is the code-held record that
+        route_ill_request's commit path and HitlGateHook later verify a
+        resolved_via_substitution claim against, rather than trusting the
+        model-supplied flag alone (stacks.hitl.ill_disambiguation_verification,
+        whole-branch review Critical 1). A failed invocation writes nothing,
+        since no real result exists to record.
 
         Args:
             library_id: Tenant scope; must match the session's own library_id.
@@ -120,6 +134,8 @@ def make_disambiguate_ill_candidates(repo: LibraryDataRepository, session_librar
             _validate_narrowed_candidate(result.narrowed_candidate_id, candidate_ids)
         except ValueError:
             result = ILLDisambiguationResult(narrowed_candidate_id=None, confidence=0.0, still_ambiguous=True)
+
+        disambiguation_cache.put(library_id, ill_request_id, result.model_dump(mode="json"))
 
         return {"status": "success", "content": [{"json": result.model_dump(mode="json")}]}
 

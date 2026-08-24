@@ -90,17 +90,24 @@ def build_stacks_agent(
     room_conflict_cache = EvaluationCache()
     ill_cache = EvaluationCache()
     overdue_cache = EvaluationCache()
+    # The ILL Disambiguation Specialist's own convergence-result cache,
+    # written by disambiguate_ill_candidates and read by both
+    # route_ill_request's commit path and HitlGateHook -- shared the same
+    # way the three EvaluationCache instances above are shared, so a
+    # resolved_via_substitution claim can only take effect when the
+    # specialist actually ran (whole-branch review Critical 1).
+    ill_disambiguation_cache = EvaluationCache()
     tier_ledger = TierLedger()
     audit_sink = AuditLogSink()
     notification_sink = NotificationSink()
 
     get_library_data = make_get_library_data(repo, library_id)
     resolve_room_conflict = make_resolve_room_conflict(repo, room_conflict_cache, tier_ledger, library_id)
-    route_ill_request = make_route_ill_request(repo, ill_cache, tier_ledger, library_id, memory)
+    route_ill_request = make_route_ill_request(repo, ill_cache, tier_ledger, library_id, memory, ill_disambiguation_cache)
     run_overdue_chase = make_run_overdue_chase(repo, overdue_cache, tier_ledger, library_id, now, memory)
     notify_parties = make_notify_parties(repo, notification_sink, tier_ledger, library_id)
 
-    hitl_gate = HitlGateHook(room_conflict_cache, ill_cache, overdue_cache)
+    hitl_gate = HitlGateHook(room_conflict_cache, ill_cache, overdue_cache, ill_disambiguation_cache)
     audit_log = AuditLogHook(audit_sink, session_id, library_id, tier_ledger=tier_ledger)
     memory_event = MemoryEventHook(memory, library_id)
 
@@ -121,7 +128,7 @@ def build_stacks_agent(
         temperature=0.2,
     )
 
-    disambiguate_ill_candidates = make_disambiguate_ill_candidates(repo, library_id, model)
+    disambiguate_ill_candidates = make_disambiguate_ill_candidates(repo, library_id, model, ill_disambiguation_cache)
 
     agent = Agent(
         model=model,
