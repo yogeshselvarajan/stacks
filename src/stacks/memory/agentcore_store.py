@@ -26,23 +26,34 @@ observed latency and actual content shape here.
 
 KNOWN DISCREPANCY found via local introspection (no network/credentials
 needed, `inspect.getsource(MemoryClient.retrieve_memories)` against the
-installed bedrock_agentcore==1.18.1 package) and NOT fixed in this task,
-per this task's explicit instruction not to silently guess a fix for an
-API mismatch: `retrieve_memories`'s `query` parameter is typed with a
-default of `None` in its signature, but the method's own body raises
+installed bedrock_agentcore==1.18.1 package): `retrieve_memories`'s
+`query` parameter is typed with a default of `None` in its signature, but
+the method's own body raises
 `TypeError("retrieve_memories() missing required argument: 'query'")`
-immediately if `query is None`. This module's calls below (as specified
-by this plan's brief) do not pass `query`, so as written they will raise
-that TypeError before ever reaching AWS, the first time a human runs the
-live tests in Step 5 -- this is not a "wrong retrieved shape" problem, it
-is a hard call-time error. A plausible fix is to pass some fixed `query`
-value (e.g. an empty string, or a project-specific sentinel), but the
-correct value depends on AgentCore Memory's real retrieval semantics
-(whether an empty/wildcard query still returns all records scoped by
-`namespace`/`actor_id`, or returns none) -- semantics this task's
-real-AWS boundary does not permit verifying live. Left as specified by
-the brief; flagged here and in the Task 6 report for the human running
-Step 5 to resolve.
+immediately if `query is None`. This is fully knowable and fully fixable
+from local introspection alone (no AWS access needed), unlike the
+retrieved-event-shape question above, which genuinely requires a live
+response to resolve -- so both `retrieve_memories` calls below now pass
+an explicit `query=actor_id`. This avoids the guaranteed call-time
+TypeError (which, since `get_ill_substitution_pattern` is also called
+internally by `record_ill_routing_event` to read existing state before
+merging, previously made all 4 public methods on this class unusable, not
+just the two read methods). What remains genuinely unverified until a
+human runs Step 5's live test is the *semantic* correctness of
+`query=actor_id`: whether AgentCore Memory's retrieval actually scopes
+results by `namespace`/`actor_id` regardless of `query` content (in which
+case any non-empty string works), or whether `query` is matched
+semantically against event content (in which case `actor_id`, which never
+appears in the JSON payload written by this class, may fail to match
+anything). Record what Step 5 observes here once run.
+
+One more item worth flagging while already reading this section of the
+SDK: `retrieve_memories`'s own docstring marks its `actor_id` parameter
+"(deprecated, use namespace)". This module still passes both `namespace`
+and `actor_id` to every call, matching the brief's original design and
+not itself a call-time break, but a future reader should know `actor_id`
+alongside `namespace` is passing a deprecated parameter, not an
+oversight -- worth revisiting when this is next touched.
 """
 from __future__ import annotations
 
@@ -68,7 +79,7 @@ class AgentCoreMemoryStore:
         namespace = f"{library_id}:{requester_key}"
         actor_id = f"{_ILL_ACTOR_PREFIX}:{namespace}"
         events = self._client.retrieve_memories(
-            memory_id=self._memory_id, namespace=namespace, actor_id=actor_id, top_k=1,
+            memory_id=self._memory_id, namespace=namespace, actor_id=actor_id, query=actor_id, top_k=1,
         )
         if not events:
             return None
@@ -107,7 +118,7 @@ class AgentCoreMemoryStore:
         namespace = f"{library_id}:{patron_id}"
         actor_id = f"{_HARDSHIP_ACTOR_PREFIX}:{namespace}"
         events = self._client.retrieve_memories(
-            memory_id=self._memory_id, namespace=namespace, actor_id=actor_id, top_k=1,
+            memory_id=self._memory_id, namespace=namespace, actor_id=actor_id, query=actor_id, top_k=1,
         )
         if not events:
             return None
