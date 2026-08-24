@@ -74,9 +74,16 @@ def test_build_stacks_agent_registers_all_six_tools(monkeypatch):
     }
 
 
-def test_build_stacks_agent_registers_both_hooks(monkeypatch):
+def test_build_stacks_agent_registers_all_three_hooks(monkeypatch):
+    """Whole-branch review Important 3: the original version of this test
+    (test_build_stacks_agent_registers_both_hooks) only checked
+    HitlGateHook and AuditLogHook -- MemoryEventHook (added by Task 8) was
+    asserted nowhere outside its own isolated unit test file. Same failure
+    class as Plan 1's "provably vacuous safety-verification test": a test
+    can pass even when a hook silently isn't wired into the real Agent."""
     from stacks.hitl.hitl_gate import HitlGateHook
     from stacks.hooks.audit_log import AuditLogHook
+    from stacks.hooks.memory_event import MemoryEventHook
     from strands.hooks import BeforeToolCallEvent, AfterToolCallEvent
 
     bundle = _build_bundle(monkeypatch)
@@ -85,6 +92,65 @@ def test_build_stacks_agent_registers_both_hooks(monkeypatch):
     after_owners = {cb.__self__.__class__ for cb in registry._registered_callbacks.get(AfterToolCallEvent, [])}
     assert HitlGateHook in before_owners
     assert AuditLogHook in after_owners
+    assert MemoryEventHook in after_owners
+
+
+def test_build_stacks_agent_threads_memory_and_now_through_to_the_tools_that_need_them(monkeypatch):
+    """Whole-branch review Important 3 (continued): registering the hook
+    object is not enough on its own -- the memory and now constructor
+    arguments must genuinely reach the tools that read them, not just
+    exist as unused parameters. Constructs build_stacks_agent with a
+    distinguishable sentinel MemoryStore and a fixed now(), drives real
+    tool calls through the built Agent's own tool registry (bypassing the
+    model, exactly like test_build_stacks_agent_derives_library_id_from_claims
+    already does for get_library_data), and confirms both were actually
+    reached -- not silently defaulted to InMemoryMemoryStore() or
+    datetime.now()."""
+
+    class _SpyMemoryStore:
+        def __init__(self):
+            self.get_ill_substitution_pattern_calls: list[tuple[str, str]] = []
+
+        def get_ill_substitution_pattern(self, library_id, requester_key):
+            self.get_ill_substitution_pattern_calls.append((library_id, requester_key))
+            return None
+
+        def record_ill_routing_event(self, *args, **kwargs):
+            pass
+
+        def get_hardship_history(self, library_id, patron_id):
+            return None
+
+        def record_hardship_flag(self, *args, **kwargs):
+            pass
+
+    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS") and not os.environ.get("STACKS_BEDROCK_MODEL_ID"):
+        monkeypatch.setenv("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+
+    repo = InMemoryLibraryDataRepository()
+    seed_demo_library(repo, library_id="lib_demo")
+    claims = StaffIdentityClaims(role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review")
+    spy_memory = _SpyMemoryStore()
+    fixed_now = lambda: datetime(2026, 9, 5, tzinfo=timezone.utc)  # noqa: E731
+
+    bundle = build_stacks_agent(repo, claims, session_id="sess_memory_now", now=fixed_now, memory=spy_memory)
+
+    # memory: route_ill_request's evaluate action reads
+    # get_ill_substitution_pattern -- the sentinel only sees this call if
+    # build_stacks_agent actually threaded the passed-in memory object
+    # through to make_route_ill_request, rather than defaulting to a
+    # fresh InMemoryMemoryStore() internally.
+    route_ill_request_tool = bundle.agent.tool_registry.registry["route_ill_request"]
+    route_ill_request_tool(library_id="lib_demo", ill_request_id="ill_ambiguous", action="evaluate")
+    assert spy_memory.get_ill_substitution_pattern_calls == [("lib_demo", "patron_ill_2")]
+
+    # now: run_overdue_chase's evaluate action computes days_overdue from
+    # the injected now() -- a default datetime.now() would not produce
+    # this exact, deterministic figure.
+    run_overdue_chase_tool = bundle.agent.tool_registry.registry["run_overdue_chase"]
+    result = run_overdue_chase_tool(library_id="lib_demo", circulation_record_id="circ_green", action="evaluate")
+    body = result["content"][0]["json"]
+    assert body["days_overdue"] == (fixed_now() - datetime(2026, 8, 20, tzinfo=timezone.utc)).days
 
 
 @pytest.mark.skipif(
