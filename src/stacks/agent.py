@@ -1,12 +1,14 @@
-"""Builds the Stacks Agent: registers the five Plan 1 tools and two hooks
-(HITL gate, audit log) against a shared repository and HITL support
-objects. See docs/architecture/final_architecture.md section 4.2.
+"""Builds the Stacks Agent: registers the five Plan 1 tools and three hooks
+(HITL gate, audit log, memory event) against a shared repository and HITL
+support objects. See docs/architecture/final_architecture.md section 4.2.
 
 Plan 1 scope: single agent, five tools (get_library_data,
 resolve_room_conflict, route_ill_request, run_overdue_chase,
-notify_parties). The sixth tool (disambiguate_ill_candidates, the ILL
-Disambiguation Specialist wrapper) and AgentCore Memory/Identity wiring
-are later plans -- see CLAUDE.md's build order.
+notify_parties). Plan 2 Task 8 wires a MemoryStore (defaulting to
+InMemoryMemoryStore) and MemoryEventHook alongside the two Plan 1 hooks.
+The sixth tool (disambiguate_ill_candidates, the ILL Disambiguation
+Specialist wrapper), AgentCore Identity, and a real AgentCoreMemoryStore
+backing are still later plans -- see CLAUDE.md's build order.
 """
 from __future__ import annotations
 
@@ -23,6 +25,8 @@ from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.hitl_gate import HitlGateHook
 from stacks.hitl.tier_ledger import TierLedger
 from stacks.hooks.audit_log import AuditLogHook, AuditLogSink
+from stacks.hooks.memory_event import MemoryEventHook
+from stacks.memory.store import InMemoryMemoryStore, MemoryStore
 from stacks.tools.get_library_data import make_get_library_data
 from stacks.tools.notify_parties import NotificationSink, make_notify_parties
 from stacks.tools.resolve_room_conflict import make_resolve_room_conflict
@@ -59,6 +63,7 @@ def build_stacks_agent(
     claims: StaffIdentityClaims,
     session_id: str,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+    memory: MemoryStore | None = None,
 ) -> StacksAgentBundle:
     """Builds one Stacks Agent scoped to one library tenant and one session.
 
@@ -67,8 +72,13 @@ def build_stacks_agent(
     as a bare, trusted string. docs/architecture/final_architecture.md
     section 10.4 step 3: the BFF constructs Invocation State from verified
     claims, never a client-supplied field.
+
+    memory defaults to InMemoryMemoryStore() so every existing caller that
+    doesn't pass one keeps working unchanged -- production/live-test
+    callers pass a real AgentCoreMemoryStore explicitly.
     """
     library_id = claims.library_id
+    memory = memory if memory is not None else InMemoryMemoryStore()
     room_conflict_cache = EvaluationCache()
     ill_cache = EvaluationCache()
     overdue_cache = EvaluationCache()
@@ -78,12 +88,13 @@ def build_stacks_agent(
 
     get_library_data = make_get_library_data(repo, library_id)
     resolve_room_conflict = make_resolve_room_conflict(repo, room_conflict_cache, tier_ledger, library_id)
-    route_ill_request = make_route_ill_request(repo, ill_cache, tier_ledger, library_id)
-    run_overdue_chase = make_run_overdue_chase(repo, overdue_cache, tier_ledger, library_id, now)
+    route_ill_request = make_route_ill_request(repo, ill_cache, tier_ledger, library_id, memory)
+    run_overdue_chase = make_run_overdue_chase(repo, overdue_cache, tier_ledger, library_id, now, memory)
     notify_parties = make_notify_parties(repo, notification_sink, tier_ledger, library_id)
 
     hitl_gate = HitlGateHook(room_conflict_cache, ill_cache, overdue_cache)
     audit_log = AuditLogHook(audit_sink, session_id, library_id, tier_ledger=tier_ledger)
+    memory_event = MemoryEventHook(memory, library_id)
 
     model_id = os.environ.get("STACKS_BEDROCK_MODEL_ID")
     if not model_id:
@@ -105,7 +116,7 @@ def build_stacks_agent(
     agent = Agent(
         model=model,
         tools=[get_library_data, resolve_room_conflict, route_ill_request, run_overdue_chase, notify_parties],
-        hooks=[hitl_gate, audit_log],
+        hooks=[hitl_gate, audit_log, memory_event],
         system_prompt=SYSTEM_PROMPT,
     )
 

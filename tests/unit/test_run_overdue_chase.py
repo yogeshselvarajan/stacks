@@ -4,17 +4,24 @@ from stacks.data.fixtures import seed_demo_library
 from stacks.data.memory_repository import InMemoryLibraryDataRepository
 from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.tier_ledger import TierLedger
+from stacks.memory.store import InMemoryMemoryStore
 from stacks.tools.run_overdue_chase import make_run_overdue_chase
+from stacks.types import HardshipHistoryFact
 
 _NOW = lambda: datetime(2026, 9, 1, tzinfo=timezone.utc)  # noqa: E731 -- fixed clock for deterministic tests
 
 
-def _build():
+def _repo():
     repo = InMemoryLibraryDataRepository()
     seed_demo_library(repo, library_id="lib_demo")
+    return repo
+
+
+def _build():
+    repo = _repo()
     cache = EvaluationCache()
     tier_ledger = TierLedger()
-    tool_fn = make_run_overdue_chase(repo, cache, tier_ledger, "lib_demo", _NOW)
+    tool_fn = make_run_overdue_chase(repo, cache, tier_ledger, "lib_demo", _NOW, InMemoryMemoryStore())
     return tool_fn, repo, tier_ledger
 
 
@@ -176,3 +183,63 @@ def test_severity_check_uses_word_boundaries_not_substrings():
         message_body="Please define your household threshold per OD-1.",
     )
     assert result["content"][0]["json"]["status"] == "committed"
+
+
+def test_evaluate_reads_recalled_hardship_history_within_recency_window():
+    repo = _repo()  # reuse this file's existing fixture helper
+    memory = InMemoryMemoryStore()
+    memory.set_hardship_history("lib_demo", "patron_overdue_1", HardshipHistoryFact(
+        flagged_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    ))
+    tool_fn = make_run_overdue_chase(
+        repo, EvaluationCache(), TierLedger(), "lib_demo",
+        now=lambda: datetime(2026, 9, 5, tzinfo=timezone.utc), memory=memory,
+    )
+    result = tool_fn(library_id="lib_demo", circulation_record_id="circ_green", action="evaluate")
+    assert result["content"][0]["json"]["has_recalled_hardship_history"] is True
+
+
+def test_evaluate_ignores_a_hardship_fact_outside_the_recency_window():
+    repo = _repo()
+    memory = InMemoryMemoryStore()
+    memory.set_hardship_history("lib_demo", "patron_overdue_1", HardshipHistoryFact(
+        flagged_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    ))
+    tool_fn = make_run_overdue_chase(
+        repo, EvaluationCache(), TierLedger(), "lib_demo",
+        now=lambda: datetime(2026, 9, 5, tzinfo=timezone.utc), memory=memory,
+    )
+    result = tool_fn(library_id="lib_demo", circulation_record_id="circ_green", action="evaluate")
+    assert result["content"][0]["json"]["has_recalled_hardship_history"] is False
+
+
+def test_evaluate_fails_closed_on_memory_retrieval_error():
+    repo = _repo()
+
+    class RaisingMemory:
+        def get_hardship_history(self, library_id, patron_id):
+            raise RuntimeError("simulated retrieval failure")
+
+    tool_fn = make_run_overdue_chase(
+        repo, EvaluationCache(), TierLedger(), "lib_demo",
+        now=lambda: datetime(2026, 9, 5, tzinfo=timezone.utc), memory=RaisingMemory(),
+    )
+    result = tool_fn(library_id="lib_demo", circulation_record_id="circ_green", action="evaluate")
+    assert result["content"][0]["json"]["has_recalled_hardship_history"] is True
+
+
+def test_committed_result_carries_patron_id_and_hitl_tier_for_memory_hook():
+    repo = _repo()
+    memory = InMemoryMemoryStore()
+    tool_fn = make_run_overdue_chase(
+        repo, EvaluationCache(), TierLedger(), "lib_demo",
+        now=lambda: datetime(2026, 9, 5, tzinfo=timezone.utc), memory=memory,
+    )
+    tool_fn(library_id="lib_demo", circulation_record_id="circ_green", action="evaluate")
+    result = tool_fn(
+        library_id="lib_demo", circulation_record_id="circ_green", action="commit",
+        message_body="Per OD-1, this is your first reminder.",
+    )
+    body = result["content"][0]["json"]
+    assert body["patron_id"] == "patron_overdue_1"
+    assert body["hitl_tier"] == "GREEN"

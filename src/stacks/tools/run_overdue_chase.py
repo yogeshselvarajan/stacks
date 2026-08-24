@@ -19,6 +19,7 @@ from stacks.data.repository import LibraryDataRepository
 from stacks.hitl.classify import Workflow, classify_overdue_chase, is_approval_valid
 from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.tier_ledger import TierLedger
+from stacks.memory.store import MemoryStore
 from stacks.types import ApprovalToken, SensitivityFlag
 
 _ESCALATION_LADDER = ["informational", "fee_mention", "hold_block", "collections_referral"]
@@ -29,6 +30,8 @@ _SEVERITY_SIGNALS = {
     3: ("collections", "collection agency", "legal action", "referred to collections"),
 }
 
+_HARDSHIP_RECENCY_WINDOW_DAYS = 365  # agent_architecture.md section 4.4's example figure, per this plan's spec section 4.2
+
 
 def make_run_overdue_chase(
     repo: LibraryDataRepository,
@@ -36,6 +39,7 @@ def make_run_overdue_chase(
     tier_ledger: TierLedger,
     session_library_id: str,
     now: Callable[[], Any],
+    memory: MemoryStore,
 ):
     @tool
     def run_overdue_chase(
@@ -67,11 +71,11 @@ def make_run_overdue_chase(
         if record is None:
             return {"status": "error", "content": [{"text": "not_found"}]}
         if record.returned:
-            return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "not_overdue", "escalation_log_write": None, "overdue_session_step_id": None}}]}
+            return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "not_overdue", "escalation_log_write": None, "overdue_session_step_id": None, "patron_id": None, "hitl_tier": None}}]}
 
         days_overdue = (now() - record.due_date).days
         if days_overdue <= 0:
-            return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "not_overdue", "escalation_log_write": None, "overdue_session_step_id": None}}]}
+            return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "not_overdue", "escalation_log_write": None, "overdue_session_step_id": None, "patron_id": None, "hitl_tier": None}}]}
 
         next_tier_index = min(record.prior_reminder_tier_sent + 1, len(_ESCALATION_LADDER) - 1)
         tier_consequence = _ESCALATION_LADDER[next_tier_index]
@@ -79,6 +83,13 @@ def make_run_overdue_chase(
         if action == "evaluate":
             clauses = repo.get_policy_clauses(library_id, "overdue_escalation")
             clause = clauses[0].model_dump(mode="json") if clauses else None
+
+            try:
+                fact = memory.get_hardship_history(library_id, record.patron_id)
+                has_recalled_hardship_history = fact is not None and (now() - fact.flagged_at).days <= _HARDSHIP_RECENCY_WINDOW_DAYS
+            except Exception:
+                has_recalled_hardship_history = True  # fail-closed: treated as equivalent to a live flag
+
             evaluation = {
                 "circulation_record_id": circulation_record_id,
                 "days_overdue": days_overdue,
@@ -87,7 +98,8 @@ def make_run_overdue_chase(
                 "applicable_policy_clause": clause,
                 "sensitivity_flags": [f.value for f in record.flags],
                 "tier_consequence": tier_consequence,
-                "has_recalled_hardship_history": False,
+                "has_recalled_hardship_history": has_recalled_hardship_history,
+                "patron_id": record.patron_id,
             }
             cache.put(library_id, circulation_record_id, evaluation)
             return {"status": "success", "content": [{"json": evaluation}]}
@@ -110,17 +122,17 @@ def make_run_overdue_chase(
                     token = ApprovalToken(**approval_token)
                     # Validate token's related_action_id matches computed one
                     if token.related_action_id != related_action_id:
-                        return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None}}]}
+                        return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None, "patron_id": evaluation["patron_id"], "hitl_tier": None}}]}
                 except Exception:
                     # Malformed token: treat as no token supplied
                     token = None
 
             if not is_approval_valid(tier, token.approver_role if token else None, Workflow.OVERDUE_CHASE):
-                return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None}}]}
+                return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None, "patron_id": evaluation["patron_id"], "hitl_tier": None}}]}
 
             clause_id = (evaluation["applicable_policy_clause"] or {}).get("clause_id")
             if clause_id and (not message_body or clause_id not in message_body):
-                return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None}}]}
+                return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None, "patron_id": evaluation["patron_id"], "hitl_tier": None}}]}
 
             # Check message body doesn't contain severity keywords higher than recommended tier
             recommended_tier_index = evaluation["recommended_next_tier"]
@@ -130,13 +142,13 @@ def make_run_overdue_chase(
                     if tier_index in _SEVERITY_SIGNALS:
                         for keyword in _SEVERITY_SIGNALS[tier_index]:
                             if re.search(r"\b" + re.escape(keyword) + r"\b", message_lower):
-                                return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None}}]}
+                                return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "blocked_missing_approval", "escalation_log_write": None, "overdue_session_step_id": None, "patron_id": evaluation["patron_id"], "hitl_tier": None}}]}
 
             record.prior_reminder_tier_sent = max(record.prior_reminder_tier_sent, evaluation["recommended_next_tier"])
             repo.save_circulation_record(record)
             tier_ledger.record(library_id, related_action_id, tier, Workflow.OVERDUE_CHASE)
             escalation_log_write = {"circulation_record_id": circulation_record_id, "tier_sent": evaluation["recommended_next_tier"], "related_action_id": related_action_id}
-            return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "committed", "escalation_log_write": escalation_log_write, "overdue_session_step_id": None}}]}
+            return {"status": "success", "content": [{"json": {"circulation_record_id": circulation_record_id, "status": "committed", "escalation_log_write": escalation_log_write, "overdue_session_step_id": None, "patron_id": evaluation["patron_id"], "hitl_tier": tier.value, "sensitivity_flags": evaluation["sensitivity_flags"]}}]}
 
         return {"status": "error", "content": [{"text": f"invalid_action: {action!r}"}]}
 
