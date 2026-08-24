@@ -54,6 +54,37 @@ and `actor_id` to every call, matching the brief's original design and
 not itself a call-time break, but a future reader should know `actor_id`
 alongside `namespace` is passing a deprecated parameter, not an
 oversight -- worth revisiting when this is next touched.
+
+NAMESPACE CONVENTION (whole-branch review Important 6, fixed 2026-08-24):
+this module and scripts/provision_agentcore_memory.py previously
+disagreed on the namespace convention -- the provisioning script
+configured strategy namespace templates as "/ill_pattern/{actorId}" and
+"/hardship/{actorId}", while this module queried retrieve_memories with a
+plain "{library_id}:{requester_key}" namespace and a SEPARATELY-prefixed
+"{workflow}:{namespace}" actor_id. Resolving the provisioning script's
+template against that actor_id would produce something like
+"/ill_pattern/ill_pattern:lib_demo:patron_1", which can never equal the
+plain namespace string this module queried with -- a self-inconsistency
+between two files written in the same task, checkable statically by
+reading `MemoryClient.add_semantic_strategy`'s own docstring and source
+(`inspect.getsource`), no AWS call needed.
+
+The reconciled convention, now used consistently by both files: namespace
+IS actor_id IS one single composite string,
+f"{workflow_prefix}:{library_id}:{entity_key}" (e.g.
+"ill_pattern:lib_demo:patron_1"), computed once per method below and
+passed unchanged to every namespace/actor_id/query parameter. The
+provisioning script's strategies now use namespace_templates=["{actorId}"]
+(the AgentCore Memory template placeholder that resolves to exactly the
+create_event actor_id passed at write time, with no additional path
+segments) -- since the workflow prefix already lives inside the actor_id
+string itself, the two strategies' templates do not need to differ, and
+the two workflows' namespaces can never collide with each other or across
+library_id/entity_key (same discipline TierLedger and EvaluationCache
+already apply). This also switches the provisioning script from the
+deprecated `namespaces=` kwarg to `namespace_templates=`
+(confirmed via `inspect.getdoc(MemoryClient.add_semantic_strategy)`: the
+former is documented "DEPRECATED. Use ``namespace_templates`` instead.").
 """
 from __future__ import annotations
 
@@ -68,6 +99,21 @@ _ILL_ACTOR_PREFIX = "ill_pattern"
 _HARDSHIP_ACTOR_PREFIX = "hardship"
 
 
+def _ill_namespace(library_id: LibraryId, requester_key: str) -> str:
+    """The one composite string used as namespace, actor_id, and query for
+    every ILL substitution-pattern call -- see this module's own
+    NAMESPACE CONVENTION note above. Must match
+    scripts/provision_agentcore_memory.py's namespace_templates=["{actorId}"]
+    resolution exactly.
+    """
+    return f"{_ILL_ACTOR_PREFIX}:{library_id}:{requester_key}"
+
+
+def _hardship_namespace(library_id: LibraryId, patron_id: PatronId) -> str:
+    """The hardship-history counterpart to _ill_namespace above."""
+    return f"{_HARDSHIP_ACTOR_PREFIX}:{library_id}:{patron_id}"
+
+
 class AgentCoreMemoryStore:
     def __init__(self, memory_id: str, region: str) -> None:
         self._memory_id = memory_id
@@ -76,10 +122,9 @@ class AgentCoreMemoryStore:
     def get_ill_substitution_pattern(
         self, library_id: LibraryId, requester_key: str
     ) -> RequesterSubstitutionPattern | None:
-        namespace = f"{library_id}:{requester_key}"
-        actor_id = f"{_ILL_ACTOR_PREFIX}:{namespace}"
+        namespace = _ill_namespace(library_id, requester_key)
         events = self._client.retrieve_memories(
-            memory_id=self._memory_id, namespace=namespace, actor_id=actor_id, query=actor_id, top_k=1,
+            memory_id=self._memory_id, namespace=namespace, actor_id=namespace, query=namespace, top_k=1,
         )
         if not events:
             return None
@@ -96,8 +141,7 @@ class AgentCoreMemoryStore:
         subject_area: str | None,
         resolved_via_substitution: bool,
     ) -> None:
-        namespace = f"{library_id}:{requester_key}"
-        actor_id = f"{_ILL_ACTOR_PREFIX}:{namespace}"
+        namespace = _ill_namespace(library_id, requester_key)
         existing = self.get_ill_substitution_pattern(library_id, requester_key)
         frequency = (existing.request_frequency if existing else 0) + request_frequency_delta
         subject_areas = list(existing.subject_areas) if existing else []
@@ -110,15 +154,14 @@ class AgentCoreMemoryStore:
             last_updated=datetime.now(timezone.utc),
         )
         self._client.create_event(
-            memory_id=self._memory_id, actor_id=actor_id, session_id=namespace,
+            memory_id=self._memory_id, actor_id=namespace, session_id=f"{library_id}:{requester_key}",
             messages=[(json.dumps(pattern.model_dump(mode="json")), "ASSISTANT")],
         )
 
     def get_hardship_history(self, library_id: LibraryId, patron_id: PatronId) -> HardshipHistoryFact | None:
-        namespace = f"{library_id}:{patron_id}"
-        actor_id = f"{_HARDSHIP_ACTOR_PREFIX}:{namespace}"
+        namespace = _hardship_namespace(library_id, patron_id)
         events = self._client.retrieve_memories(
-            memory_id=self._memory_id, namespace=namespace, actor_id=actor_id, query=actor_id, top_k=1,
+            memory_id=self._memory_id, namespace=namespace, actor_id=namespace, query=namespace, top_k=1,
         )
         if not events:
             return None
@@ -128,11 +171,10 @@ class AgentCoreMemoryStore:
         return HardshipHistoryFact(**payload)
 
     def record_hardship_flag(self, library_id: LibraryId, patron_id: PatronId, flagged_at: datetime) -> None:
-        namespace = f"{library_id}:{patron_id}"
-        actor_id = f"{_HARDSHIP_ACTOR_PREFIX}:{namespace}"
+        namespace = _hardship_namespace(library_id, patron_id)
         fact = HardshipHistoryFact(flagged_at=flagged_at)
         self._client.create_event(
-            memory_id=self._memory_id, actor_id=actor_id, session_id=namespace,
+            memory_id=self._memory_id, actor_id=namespace, session_id=f"{library_id}:{patron_id}",
             messages=[(json.dumps(fact.model_dump(mode="json")), "ASSISTANT")],
         )
 

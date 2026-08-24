@@ -1,10 +1,12 @@
 import os
+import pathlib
 import time
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from stacks.memory.agentcore_store import AgentCoreMemoryStore
+from stacks.memory.agentcore_store import AgentCoreMemoryStore, _hardship_namespace, _ill_namespace
 
 
 def test_live_write_then_read_ill_substitution_pattern():
@@ -59,3 +61,84 @@ def test_live_write_then_read_hardship_history():
         time.sleep(5)
 
     assert result is not None
+
+
+def test_ill_namespace_actor_id_and_query_are_the_same_composite_string():
+    """Whole-branch review Important 6 regression guard, offline and no
+    AWS call needed: create_event's actor_id and retrieve_memories'
+    namespace/actor_id/query must all be the exact same string for a
+    given (library_id, requester_key), or a write can never be found by a
+    later read regardless of what the provisioning script's
+    namespace_templates resolve to."""
+    fake_client = MagicMock()
+    fake_client.retrieve_memories.return_value = []
+
+    with patch("stacks.memory.agentcore_store.MemoryClient", return_value=fake_client):
+        store = AgentCoreMemoryStore(memory_id="mem_1", region="us-west-2")
+        store.get_ill_substitution_pattern("lib_demo", "patron_1")
+
+    _, kwargs = fake_client.retrieve_memories.call_args
+    assert kwargs["namespace"] == kwargs["actor_id"] == kwargs["query"] == "ill_pattern:lib_demo:patron_1"
+
+
+def test_ill_record_writes_with_the_same_composite_string_as_actor_id():
+    fake_client = MagicMock()
+    fake_client.retrieve_memories.return_value = []  # existing = None, read-before-merge inside record_ill_routing_event
+
+    with patch("stacks.memory.agentcore_store.MemoryClient", return_value=fake_client):
+        store = AgentCoreMemoryStore(memory_id="mem_1", region="us-west-2")
+        store.record_ill_routing_event(
+            "lib_demo", "patron_1", request_frequency_delta=1, subject_area=None, resolved_via_substitution=False,
+        )
+
+    _, kwargs = fake_client.create_event.call_args
+    assert kwargs["actor_id"] == "ill_pattern:lib_demo:patron_1"
+
+
+def test_hardship_namespace_actor_id_and_query_are_the_same_composite_string():
+    fake_client = MagicMock()
+    fake_client.retrieve_memories.return_value = []
+
+    with patch("stacks.memory.agentcore_store.MemoryClient", return_value=fake_client):
+        store = AgentCoreMemoryStore(memory_id="mem_1", region="us-west-2")
+        store.get_hardship_history("lib_demo", "patron_2")
+
+    _, kwargs = fake_client.retrieve_memories.call_args
+    assert kwargs["namespace"] == kwargs["actor_id"] == kwargs["query"] == "hardship:lib_demo:patron_2"
+
+
+def test_hardship_record_writes_with_the_same_composite_string_as_actor_id():
+    fake_client = MagicMock()
+
+    with patch("stacks.memory.agentcore_store.MemoryClient", return_value=fake_client):
+        store = AgentCoreMemoryStore(memory_id="mem_1", region="us-west-2")
+        store.record_hardship_flag("lib_demo", "patron_2", flagged_at=datetime.now(timezone.utc))
+
+    _, kwargs = fake_client.create_event.call_args
+    assert kwargs["actor_id"] == "hardship:lib_demo:patron_2"
+
+
+def test_ill_and_hardship_namespaces_for_the_same_library_and_key_never_collide():
+    """The two workflows' composite namespaces must be disjoint even for
+    the exact same library_id and entity key -- prefixed by workflow, so
+    a patron who is also an ILL requester never has one workflow's fact
+    read back for the other's namespace."""
+    assert _ill_namespace("lib_demo", "same_id") != _hardship_namespace("lib_demo", "same_id")
+
+
+def test_provisioning_script_namespace_templates_resolve_to_exactly_actor_id():
+    """Static, no-AWS-call regression guard for the exact self-inconsistency
+    this finding closed: both strategies' namespace_templates must be
+    exactly ["{actorId}"] (the AgentCore Memory placeholder that resolves
+    to precisely the create_event actor_id passed at write time, with no
+    extra path segments), matching what this store passes as namespace
+    when reading. Reads the provisioning script's own source rather than
+    running it (Global Constraints: provisioning is never a side effect
+    of running tests)."""
+    script_path = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "provision_agentcore_memory.py"
+    source = script_path.read_text()
+    # >= 2 rather than == 2: the module docstring also mentions the exact
+    # template string in prose, so the two real add_semantic_strategy_and_wait
+    # call sites are a floor, not an exact count.
+    assert source.count('namespace_templates=["{actorId}"]') >= 2
+    assert "namespaces=[" not in source  # the deprecated kwarg must not have crept back in
