@@ -18,9 +18,11 @@ import os
 from datetime import datetime, timezone
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from strands.session.s3_session_manager import S3SessionManager
 
 from stacks.agent import build_stacks_agent
 from stacks.data.dynamodb_repository import DynamoDBLibraryDataRepository
+from stacks.hitl.dynamodb_pending_approvals import DynamoDBPendingApprovalsSink
 from stacks.identity.claims import StaffIdentityClaims
 from stacks.memory.agentcore_store import AgentCoreMemoryStore
 from stacks.sequencer.overdue_sequencer import OverdueSequencer
@@ -52,9 +54,16 @@ def invoke(payload: dict) -> dict:
 
 def _run_chat(payload: dict) -> dict:
     claims = _claims_from_payload(payload)
+    session_id = payload["session_id"]
+    pending_approvals_sink = DynamoDBPendingApprovalsSink(region=_REGION, environment=_ENVIRONMENT)
+    session_manager = (
+        S3SessionManager(session_id=session_id, bucket=_SESSION_BUCKET, region_name=_REGION)
+        if _SESSION_BUCKET else None
+    )
     bundle = build_stacks_agent(
-        _repo, claims, session_id=payload["session_id"],
+        _repo, claims, session_id=session_id,
         now=lambda: datetime.now(timezone.utc), memory=_memory,
+        pending_approvals_sink=pending_approvals_sink, session_manager=session_manager,
     )
     result = bundle.agent(payload["prompt"])
     return {"message": str(result.message), "stop_reason": getattr(result, "stop_reason", None)}
@@ -65,9 +74,14 @@ def _run_overdue_sweep(payload: dict) -> dict:
         return {"error": "STACKS_SESSION_BUCKET not configured"}
 
     claims = StaffIdentityClaims(role="circulation_staff", library_id=payload["library_id"], case_review_role=None)
+    pending_approvals_sink = DynamoDBPendingApprovalsSink(region=_REGION, environment=_ENVIRONMENT)
 
     def agent_factory(session_id: str):
-        bundle = build_stacks_agent(_repo, claims, session_id=session_id, memory=_memory)
+        session_manager = S3SessionManager(session_id=session_id, bucket=_SESSION_BUCKET, region_name=_REGION)
+        bundle = build_stacks_agent(
+            _repo, claims, session_id=session_id, memory=_memory,
+            pending_approvals_sink=pending_approvals_sink, session_manager=session_manager,
+        )
         return bundle.agent
 
     sequencer = OverdueSequencer(bucket=_SESSION_BUCKET, region=_REGION, agent_factory=agent_factory)
