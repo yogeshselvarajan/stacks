@@ -18,12 +18,21 @@ from stacks.hooks.dynamodb_audit_log import DynamoDBAuditLogSink
 from stacks.identity.claims import InvalidClaimsError, StaffIdentityClaims
 from stacks.identity.cognito_verifier import CognitoClaimsVerifier
 
-from bff.config import COGNITO_APP_CLIENT_ID, COGNITO_USER_POOL_ID, ENVIRONMENT, REGION, SESSION_COOKIE_NAME
+from bff.clients.agent_runtime import AgentRuntimeClient, BedrockAgentCoreRuntimeClient
+from bff.config import (
+    AGENT_RUNTIME_ARN,
+    COGNITO_APP_CLIENT_ID,
+    COGNITO_USER_POOL_ID,
+    ENVIRONMENT,
+    REGION,
+    SESSION_COOKIE_NAME,
+)
 
 _verifier: CognitoClaimsVerifier | None = None
 _repo: LibraryDataRepository | None = None
 _pending_approvals_sink: PendingApprovalsSink | None = None
 _audit_sink: AuditLogSink | None = None
+_agent_runtime_client: AgentRuntimeClient | None = None
 
 
 def _get_verifier() -> CognitoClaimsVerifier:
@@ -61,3 +70,10 @@ def get_audit_sink() -> AuditLogSink:
     if _audit_sink is None:
         _audit_sink = DynamoDBAuditLogSink(region=REGION, environment=ENVIRONMENT)
     return _audit_sink
+
+
+def get_agent_runtime_client() -> AgentRuntimeClient:
+    global _agent_runtime_client
+    if _agent_runtime_client is None:
+        _agent_runtime_client = BedrockAgentCoreRuntimeClient(region=REGION, agent_runtime_arn=AGENT_RUNTIME_ARN)
+    return _agent_runtime_client

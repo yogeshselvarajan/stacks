@@ -253,4 +253,34 @@ def test_build_stacks_agent_threads_pending_approvals_sink_to_the_hitl_gate(monk
     ]
     assert len(hitl_gate_hooks) == 1
     assert hitl_gate_hooks[0]._pending_approvals_sink is sink
+
+
+@pytest.mark.skipif(
+    not os.environ.get("RUN_LIVE_BEDROCK_TESTS"),
+    reason="Requires real AWS credentials and Bedrock model access. Set RUN_LIVE_BEDROCK_TESTS=1 to run.",
+)
+def test_bff_shaped_edit_then_approve_resumes_correctly_via_real_bedrock(monkeypatch):
+    """Exercises the exact InterruptResponseContent shape
+    bff/routes/approvals.py builds (Task 17), including the edited_value
+    passthrough (Task 3), against a real Agent + HitlGateHook +
+    resolve_room_conflict, proving the BFF's write endpoint contract is
+    correct before Task 18's real Runtime redeploy exists."""
+    bundle = _build_bundle(monkeypatch)
+    result = bundle.agent(
+        "There is a room-booking conflict between booking b_recurring_b and "
+        "booking b_walkin_b in room_b. Evaluate it and attempt to resolve "
+        "it per the room booking priority policy."
+    )
+    assert result.stop_reason == "interrupt"
+    interrupt_id = result.interrupts[0].id
+
+    responses = [{"interruptResponse": {"interruptId": interrupt_id, "response": {
+        "approved": True, "approver_role": "librarian_case_review", "token": "hitl_resume:b_recurring_b:b_walkin_b",
+        "edited_value": "b_walkin_b",
+    }}}]
+    result = bundle.agent(responses)
+
+    audit_records = bundle.audit_sink.all()
+    committed = [r for r in audit_records if r.tool_name == "resolve_room_conflict" and r.outcome == "committed"]
+    assert len(committed) == 1
     assert hitl_gate_hooks[0]._session_id == "sess_pa"
