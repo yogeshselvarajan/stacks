@@ -14,3 +14,7 @@ output "session_bucket_name" {
 output "session_bucket_arn" {
   value = module.session_state.bucket_arn
 }
+
+output "agent_runtime_execution_role_arn" {
+  value = module.iam.agent_runtime_execution_role_arn
+}

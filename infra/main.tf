@@ -21,3 +21,12 @@ module "session_state" {
   environment = var.environment
   tags        = local.common_tags
 }
+
+module "iam" {
+  source               = "./modules/iam"
+  environment          = var.environment
+  tags                 = local.common_tags
+  dynamodb_table_arns  = values(module.dynamodb.table_arns)
+  session_bucket_arn   = module.session_state.bucket_arn
+  agentcore_memory_arn = var.agentcore_memory_arn
+}

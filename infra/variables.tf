@@ -17,3 +17,9 @@ variable "tags" {
     Project = "stacks"
   }
 }
+
+variable "agentcore_memory_arn" {
+  description = "Plan 2's provisioned AgentCore Memory resource ARN (from scripts/provision_agentcore_memory.py's own output). Leave empty until known."
+  type        = string
+  default     = ""
+}
