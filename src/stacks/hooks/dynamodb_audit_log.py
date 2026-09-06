@@ -15,6 +15,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 from stacks.hooks.audit_log import AuditLogRecord
+from stacks.types import AuditActor
 
 
 class DynamoDBAuditLogSink:
@@ -50,5 +51,7 @@ class DynamoDBAuditLogSink:
         for item in response.get("Items", []):
             item = dict(item)
             item.pop("next_sequence", None)
+            if item.get("actor") is not None:
+                item["actor"] = AuditActor(item["actor"])
             records.append(AuditLogRecord(**item))
         return records

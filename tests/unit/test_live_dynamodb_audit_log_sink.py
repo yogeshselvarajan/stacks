@@ -45,6 +45,8 @@ def test_live_all_returns_records_for_one_library_in_sequence_order():
     sink.append(_record(library_id, "notify_parties"))
     records = sink.all(library_id)
     assert [r.tool_name for r in records] == ["resolve_room_conflict", "notify_parties"]
+    assert all(isinstance(r.actor, AuditActor) for r in records)
+    assert all(r.actor is AuditActor.AGENT for r in records)
 
 
 def test_live_all_does_not_leak_across_library_id():
