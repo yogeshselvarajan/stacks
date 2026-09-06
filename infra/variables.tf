@@ -23,3 +23,18 @@ variable "agentcore_memory_arn" {
   type        = string
   default     = ""
 }
+
+variable "bedrock_model_id" {
+  description = "The Bedrock model ID or inference profile ID the deployed agent invokes. No guessed default -- must be set explicitly in dev.tfvars."
+  type        = string
+}
+
+variable "runtime_artifact_bucket" {
+  description = "S3 bucket holding the AgentCore Runtime deployment package (Task 6's upload target)."
+  type        = string
+}
+
+variable "runtime_artifact_key" {
+  description = "S3 key (prefix) of the uploaded deployment package zip (Task 6's upload target)."
+  type        = string
+}

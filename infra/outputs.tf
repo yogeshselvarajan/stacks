@@ -18,3 +18,7 @@ output "session_bucket_arn" {
 output "agent_runtime_execution_role_arn" {
   value = module.iam.agent_runtime_execution_role_arn
 }
+
+output "agent_runtime_arn" {
+  value = module.agentcore_runtime.agent_runtime_arn
+}

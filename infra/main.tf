@@ -30,3 +30,16 @@ module "iam" {
   session_bucket_arn   = module.session_state.bucket_arn
   agentcore_memory_arn = var.agentcore_memory_arn
 }
+
+module "agentcore_runtime" {
+  source              = "./modules/agentcore_runtime"
+  environment         = var.environment
+  region              = var.region
+  execution_role_arn  = module.iam.agent_runtime_execution_role_arn
+  artifact_bucket     = var.runtime_artifact_bucket
+  artifact_key        = var.runtime_artifact_key
+  bedrock_model_id    = var.bedrock_model_id
+  agentcore_memory_id = "" # filled in below once Plan 2's memory_id is on hand; see dev.tfvars
+  session_bucket_name = module.session_state.bucket_name
+  tags                = local.common_tags
+}
