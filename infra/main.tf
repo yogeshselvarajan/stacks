@@ -43,3 +43,13 @@ module "agentcore_runtime" {
   session_bucket_name = module.session_state.bucket_name
   tags                = local.common_tags
 }
+
+module "eventbridge_sequencer" {
+  source                         = "./modules/eventbridge_sequencer"
+  environment                    = var.environment
+  region                         = var.region
+  agent_runtime_arn              = module.agentcore_runtime.agent_runtime_arn
+  overdue_library_id             = var.overdue_library_id
+  overdue_circulation_record_ids = var.overdue_circulation_record_ids
+  tags                           = local.common_tags
+}

@@ -38,3 +38,14 @@ variable "runtime_artifact_key" {
   description = "S3 key (prefix) of the uploaded deployment package zip (Task 6's upload target)."
   type        = string
 }
+
+variable "overdue_library_id" {
+  type    = string
+  default = "lib_demo"
+}
+
+variable "overdue_circulation_record_ids" {
+  description = "Placeholder until Task 9 seeds a real overdue case and supplies its circulation_record_id."
+  type        = string
+  default     = "circ_soak_test_1"
+}

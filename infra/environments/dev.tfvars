@@ -12,3 +12,8 @@ environment = "dev"
 bedrock_model_id        = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 runtime_artifact_bucket = "stacks-session-state-690845170953-us-west-2"
 runtime_artifact_key    = "runtime-artifacts/deployment_package.zip"
+
+# overdue_library_id / overdue_circulation_record_ids: Task 8 relies on
+# variables.tf's own defaults ("lib_demo" / "circ_soak_test_1") for the
+# shim Lambda's fixed sweep list. Task 9 seeds a real overdue case and
+# will set the real values here explicitly once that case exists.
