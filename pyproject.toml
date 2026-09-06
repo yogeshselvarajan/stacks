@@ -12,11 +12,13 @@ dependencies = [
     "boto3>=1.40",
     "bedrock-agentcore>=1.15",
     "PyJWT[crypto]>=2.10",
+    "fastapi>=0.135",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "httpx>=0.28",
 ]
 
 [tool.setuptools.packages.find]
