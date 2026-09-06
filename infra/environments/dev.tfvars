@@ -25,3 +25,32 @@ runtime_artifact_key    = "runtime-artifacts/deployment_package.zip"
 # sets the real values here explicitly.
 overdue_library_id             = "lib_demo"
 overdue_circulation_record_ids = "circ_soak_test_1"
+
+# Task 10 (IAM least-privilege hardening): the exact Bedrock model ARN
+# build_stacks_agent invokes. Amazon Nova Lite, not Claude Haiku -- the
+# deployed model was switched between Task 9 and Task 10 because Claude
+# Haiku's Bedrock "model use case details" agreement was NOT_AVAILABLE on
+# this account, blocking real invocation; Nova Lite has no such gate and
+# is the live, working, deployed model, confirmed via a real smoke test.
+bedrock_model_arn = "arn:aws:bedrock:us-west-2:690845170953:inference-profile/us.amazon.nova-lite-v1:0"
+
+# Required in addition to the profile ARN above: Bedrock evaluates IAM
+# permissions at both hops for a cross-region inference profile -- the
+# profile ARN itself, and whichever regional foundation-model ARN it
+# actually dispatches to. Discovered as a real gap post-apply during
+# Task 10's smoke-test re-run: a real AccessDeniedException named
+# arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0 as
+# denied, confirming the profile had routed the call there. All three
+# regions this profile can route to (per the routing note above,
+# confirmed via `aws bedrock list-inference-profiles`) are listed so the
+# next region it happens to route to on a given invocation isn't a
+# repeat of this same failure.
+bedrock_foundation_model_arns = [
+  "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0",
+  "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-lite-v1:0",
+  "arn:aws:bedrock:us-east-2::foundation-model/amazon.nova-lite-v1:0",
+]
+
+# The real CloudWatch Logs group ARN AgentCore Runtime created for this
+# deployment, confirmed via `aws logs describe-log-groups` at Task 10 time.
+runtime_log_group_arn_pattern = "arn:aws:logs:us-west-2:690845170953:log-group:/aws/bedrock-agentcore/runtimes/stacks_agent_runtime_dev-NaNK542U2G-DEFAULT:*"

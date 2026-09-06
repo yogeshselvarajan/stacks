@@ -26,3 +26,7 @@ output "agent_runtime_arn" {
 output "overdue_shim_lambda_name" {
   value = module.eventbridge_sequencer.lambda_function_name
 }
+
+output "bff_execution_role_arn" {
+  value = module.iam.bff_execution_role_arn
+}

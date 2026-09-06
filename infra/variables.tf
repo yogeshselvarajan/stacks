@@ -49,3 +49,17 @@ variable "overdue_circulation_record_ids" {
   type        = string
   default     = "circ_soak_test_1"
 }
+
+variable "bedrock_model_arn" {
+  type = string
+}
+
+variable "bedrock_foundation_model_arns" {
+  description = "The underlying regional foundation-model ARNs the bedrock_model_arn cross-region inference profile may route to (required in addition to the profile ARN; see infra/modules/iam/variables.tf)."
+  type        = list(string)
+  default     = []
+}
+
+variable "runtime_log_group_arn_pattern" {
+  type = string
+}

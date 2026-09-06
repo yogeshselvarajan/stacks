@@ -20,3 +20,23 @@ variable "agentcore_memory_arn" {
   type        = string
   default     = ""
 }
+
+variable "bedrock_model_arn" {
+  description = "The exact Bedrock model/inference-profile ARN build_stacks_agent invokes, confirmed working by Task 7's smoke test."
+  type        = string
+}
+
+variable "bedrock_foundation_model_arns" {
+  description = "The underlying regional foundation-model ARNs the bedrock_model_arn cross-region inference profile may route to. Required in addition to the profile ARN itself -- Bedrock checks IAM permissions at both hops. Discovered as a real gap during Task 10's post-hardening smoke-test re-run (AccessDeniedException naming the exact missing us-east-1 foundation-model ARN)."
+  type        = list(string)
+  default     = []
+}
+
+variable "runtime_log_group_arn_pattern" {
+  description = "The CloudWatch Logs group ARN pattern AgentCore Runtime actually created for this deployment, confirmed by inspecting the real log group name after Task 7's first invocation."
+  type        = string
+}
+
+variable "agent_runtime_arn" {
+  type = string
+}

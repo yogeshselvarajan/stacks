@@ -23,12 +23,16 @@ module "session_state" {
 }
 
 module "iam" {
-  source               = "./modules/iam"
-  environment          = var.environment
-  tags                 = local.common_tags
-  dynamodb_table_arns  = values(module.dynamodb.table_arns)
-  session_bucket_arn   = module.session_state.bucket_arn
-  agentcore_memory_arn = var.agentcore_memory_arn
+  source                        = "./modules/iam"
+  environment                   = var.environment
+  tags                          = local.common_tags
+  dynamodb_table_arns           = values(module.dynamodb.table_arns)
+  session_bucket_arn            = module.session_state.bucket_arn
+  agentcore_memory_arn          = var.agentcore_memory_arn
+  bedrock_model_arn             = var.bedrock_model_arn
+  bedrock_foundation_model_arns = var.bedrock_foundation_model_arns
+  runtime_log_group_arn_pattern = var.runtime_log_group_arn_pattern
+  agent_runtime_arn             = module.agentcore_runtime.agent_runtime_arn
 }
 
 module "agentcore_runtime" {
