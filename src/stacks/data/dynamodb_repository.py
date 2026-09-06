@@ -67,6 +67,13 @@ class DynamoDBLibraryDataRepository:
     def save_ill_request(self, request: ILLRequestRecord) -> None:
         self._ill_requests.put_item(Item=request.model_dump(mode="json"))
 
+    def list_ill_requests(self, library_id: LibraryId) -> list[ILLRequestRecord]:
+        """library_id is the ILLRequests table's own partition key (see
+        get_ill_request's Key= above), so a plain query on it returns every
+        request for this library without needing a GSI."""
+        response = self._ill_requests.query(KeyConditionExpression=Key("library_id").eq(library_id))
+        return [ILLRequestRecord(**item) for item in response.get("Items", [])]
+
     def search_catalog_candidates(
         self, library_id: LibraryId, title: str, edition_hint: str | None
     ) -> list[CatalogCandidate]:
@@ -94,6 +101,13 @@ class DynamoDBLibraryDataRepository:
 
     def save_circulation_record(self, record: CirculationRecord) -> None:
         self._loans.put_item(Item=record.model_dump(mode="json"))
+
+    def list_circulation_records(self, library_id: LibraryId) -> list[CirculationRecord]:
+        """library_id is the Loans table's own partition key (see
+        get_circulation_record's Key= above), so a plain query on it returns
+        every circulation record for this library without needing a GSI."""
+        response = self._loans.query(KeyConditionExpression=Key("library_id").eq(library_id))
+        return [CirculationRecord(**item) for item in response.get("Items", [])]
 
     def get_policy_clauses(self, library_id: LibraryId, policy_name: str) -> list[PolicyClauseRef]:
         response = self._policy_rules.get_item(Key={"library_id": library_id, "policy_name": policy_name})

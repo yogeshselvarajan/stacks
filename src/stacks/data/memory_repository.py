@@ -38,6 +38,9 @@ class InMemoryLibraryDataRepository:
     def save_ill_request(self, request: ILLRequestRecord) -> None:
         self._ill_requests[(request.library_id, request.ill_request_id)] = request
 
+    def list_ill_requests(self, library_id: LibraryId) -> list[ILLRequestRecord]:
+        return [r for (lib, _), r in self._ill_requests.items() if lib == library_id]
+
     def set_catalog_candidates(self, library_id: str, title: str, candidates: list[CatalogCandidate]) -> None:
         """Test/fixture-only helper -- not part of the protocol, used by
         fixtures.py to seed what search_catalog_candidates returns."""
@@ -55,6 +58,9 @@ class InMemoryLibraryDataRepository:
 
     def save_circulation_record(self, record: CirculationRecord) -> None:
         self._circulation_records[(record.library_id, record.circulation_record_id)] = record
+
+    def list_circulation_records(self, library_id: LibraryId) -> list[CirculationRecord]:
+        return [r for (lib, _), r in self._circulation_records.items() if lib == library_id]
 
     def get_policy_clauses(self, library_id: LibraryId, policy_name: str) -> list[PolicyClauseRef]:
         return list(self._policy_clauses.get((library_id, policy_name), []))
