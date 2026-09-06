@@ -409,7 +409,85 @@ def test_edit_value_is_ignored_for_overdue_chase_workflow():
     )
     hook._gate(event)
     assert event.cancel_tool is False
-    assert "edited_value" not in event.tool_use["input"]
+    # Proven vacuous by mutation testing: asserting "edited_value" is
+    # absent from tool_input passes even if a future edit accidentally
+    # mapped OVERDUE_CHASE to a real field, since no implementation ever
+    # writes a literal "edited_value" key. Pin the actual field an
+    # accidental mapping mistake would inject into instead.
+    assert "message_body" not in event.tool_use["input"]
+    assert set(event.tool_use["input"]) == {"library_id", "action", "circulation_record_id", "approval_token"}
+
+
+def test_edit_value_is_not_applied_when_the_resumed_approval_is_invalid():
+    """The edit passthrough must only apply after is_approval_valid
+    succeeds, never before -- an invalid approver_role (or a denial) must
+    both block the call (cancel_tool set) AND leave the field untouched,
+    not silently smuggle the human's edited choice through on a rejected
+    approval."""
+    hook = _hook_with_ill_cached("multiple_editions", [])
+    event = _FakeEvent(
+        "route_ill_request",
+        {"library_id": "lib_demo", "action": "commit", "ill_request_id": "ill_req_123", "chosen_holding_id": "hold_original"},
+        # YELLOW tier requires ill_coordinator or branch_manager for
+        # ILL_ROUTING (YELLOW_APPROVER_ROLES) -- "intern" is neither.
+        interrupt_response={"approved": True, "approver_role": "intern", "edited_value": "hold_edited"},
+    )
+    hook._gate(event)
+    assert event.cancel_tool == "blocked_missing_approval: tier=YELLOW"
+    assert event.tool_use["input"]["chosen_holding_id"] == "hold_original"
+
+
+def test_green_tied_room_conflict_edit_resume_succeeds_with_any_role():
+    """Pins the current, intentional (inherited from Plan 1's tie-break
+    fix) behavior: is_approval_valid(Tier.GREEN, ...) is unconditionally
+    True for any role, so a tied GREEN room-conflict resume -- including
+    an edited chosen_resolution_booking_id -- can be satisfied by any
+    authenticated staff role, not only librarian_case_review. This test
+    records that as a deliberate, tested decision so a future refactor
+    cannot silently tighten or loosen it without a failing test."""
+    cache = EvaluationCache()
+    cache.put("lib_demo", "b1:b2", {
+        "conflict_id": "b1:b2",
+        "sensitivity_flags": [],
+        "applicable_policy_clause": {"policy_name": "room_booking_priority", "clause_id": "RBP-1", "clause_text": "..."},
+        "candidate_resolutions": [
+            {"booking_id_that_yields": "b1", "booking_id_that_keeps": "b2", "deterministic_score": 0.0, "rule_applied": "RBP-1"},
+            {"booking_id_that_yields": "b2", "booking_id_that_keeps": "b1", "deterministic_score": 0.0, "rule_applied": "RBP-1"},
+        ],
+        "tie": True,
+    })
+    hook = HitlGateHook(cache, EvaluationCache(), EvaluationCache(), EvaluationCache())
+    event = _FakeEvent(
+        "resolve_room_conflict",
+        {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"], "chosen_resolution_booking_id": "b1"},
+        interrupt_response={"approved": True, "approver_role": "intern", "edited_value": "b2"},
+    )
+    hook._gate(event)
+    assert event.cancel_tool is False
+    assert event.tool_use["input"]["chosen_resolution_booking_id"] == "b2"
+    assert event.tool_use["input"]["approval_token"]["approver_role"] == "intern"
+
+
+def test_pending_approvals_sink_failure_does_not_swallow_the_interrupt():
+    """A sink that raises on put() (e.g. a transient DynamoDB error) must
+    never replace the InterruptException with the sink's own exception --
+    the interrupt is the safety signal and must always propagate."""
+
+    class _ExplodingSink:
+        def put(self, record):
+            raise RuntimeError("simulated transient sink failure")
+
+        def delete(self, library_id, case_id):
+            pass
+
+        def list_for_library(self, library_id):
+            return []
+
+    hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
+    hook._pending_approvals_sink = _ExplodingSink()
+    event = _FakeEvent("resolve_room_conflict", {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
+    with pytest.raises(InterruptException):
+        hook._gate(event)
 
 
 def test_ill_gate_policy_exception_overrides_convergent_substitution_at_red():

@@ -5,6 +5,7 @@ docs/architecture/tool_architecture.md section 1 ("Single HITL choke point").
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -23,6 +24,8 @@ from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.ill_disambiguation_verification import verify_resolved_via_substitution
 from stacks.hitl.pending_approvals import PendingApprovalRecord, PendingApprovalsSink
 from stacks.types import SensitivityFlag
+
+logger = logging.getLogger(__name__)
 
 # Tool names whose "commit" action is HITL-gated, and which workflow
 # applies. notify_parties is deliberately absent -- its own gating is
@@ -125,6 +128,17 @@ class HitlGateHook(HookProvider):
             # interrupt block below, or no human is ever asked and the case
             # becomes an unresolvable dead end. A non-tied GREEN case still
             # returns early as before. Whole-branch review Important 5.
+            # is_approval_valid(Tier.GREEN, ...) is unconditionally True for
+            # any role (Plan 1's already-accepted tie-break design: GREEN
+            # requires *an* approver to pick a side, not a privileged one).
+            # This means a tied GREEN case's interrupt resume below -- edit
+            # passthrough included -- can be satisfied by any authenticated
+            # staff role, not just librarian_case_review. That is an
+            # intentional, inherited property of Plan 1's tie-break fix,
+            # not a gap Task 3 introduced; pinned explicitly by
+            # test_green_tied_room_conflict_edit_resume_succeeds_with_any_role
+            # in tests/unit/test_hitl_gate.py so a future refactor cannot
+            # silently change it in either direction without a failing test.
             is_unresolvable_tie = workflow is Workflow.ROOM_BOOKING and evaluation.get("tie")
             if tier is Tier.GREEN and not is_unresolvable_tie:
                 return
@@ -164,12 +178,24 @@ class HitlGateHook(HookProvider):
             }
         except InterruptException as exc:
             if self._pending_approvals_sink is not None:
-                self._pending_approvals_sink.put(PendingApprovalRecord(
-                    library_id=library_id, case_id=case_id, tier=tier.value, tool=tool_name,
-                    workflow=workflow.value, reason=exc.interrupt.reason,
-                    interrupt_id=exc.interrupt.id, session_id=self._session_id,
-                    created_at=self._now().isoformat(),
-                ))
+                # A sink failure (e.g. a transient DynamoDB error once the
+                # real sink is wired) must never replace the
+                # InterruptException with a sink exception -- the interrupt
+                # itself is the safety signal (the case still correctly
+                # blocks and still surfaces as stop_reason == "interrupt");
+                # losing the Approval Inbox row is strictly safer than
+                # losing that. Mirrors AuditLogHook._record's convention
+                # (src/stacks/hooks/audit_log.py) of degrading rather than
+                # losing the original signal.
+                try:
+                    self._pending_approvals_sink.put(PendingApprovalRecord(
+                        library_id=library_id, case_id=case_id, tier=tier.value, tool=tool_name,
+                        workflow=workflow.value, reason=exc.interrupt.reason,
+                        interrupt_id=exc.interrupt.id, session_id=self._session_id,
+                        created_at=self._now().isoformat(),
+                    ))
+                except Exception:
+                    logger.exception("pending_approvals_write_failed")
             raise
 
 
