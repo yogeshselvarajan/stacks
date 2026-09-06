@@ -6,3 +6,11 @@ output "dynamodb_table_arns" {
 output "aws_account_id" {
   value = data.aws_caller_identity.current.account_id
 }
+
+output "session_bucket_name" {
+  value = module.session_state.bucket_name
+}
+
+output "session_bucket_arn" {
+  value = module.session_state.bucket_arn
+}
