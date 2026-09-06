@@ -24,10 +24,21 @@ resource "aws_iam_role" "shim_lambda" {
 
 data "aws_iam_policy_document" "shim_lambda_policy" {
   statement {
-    sid       = "InvokeRuntime"
-    effect    = "Allow"
-    actions   = ["bedrock-agentcore:InvokeAgentRuntime"]
-    resources = [var.agent_runtime_arn]
+    sid     = "InvokeRuntime"
+    effect  = "Allow"
+    actions = ["bedrock-agentcore:InvokeAgentRuntime"]
+    # AWS evaluates identity-based policies against both the agent runtime
+    # and the agent endpoint being invoked (the actual InvokeAgentRuntime
+    # call resolves to the runtime's DEFAULT endpoint sub-resource), so both
+    # ARNs must be granted here or the call is denied even though the bare
+    # runtime ARN is allowed. Confirmed against a real AccessDeniedException
+    # naming the runtime-endpoint/DEFAULT resource, and against AWS's own
+    # docs (bedrock-agentcore resource-based-policies "Hierarchical
+    # authorization for agent runtime and endpoint").
+    resources = [
+      var.agent_runtime_arn,
+      "${var.agent_runtime_arn}/runtime-endpoint/DEFAULT",
+    ]
   }
 
   statement {
