@@ -203,3 +203,54 @@ def test_red_room_booking_conflict_interrupts_and_resumes_via_real_bedrock(monke
     audit_records = bundle.audit_sink.all()
     committed = [r for r in audit_records if r.tool_name == "resolve_room_conflict" and r.outcome == "committed"]
     assert committed == []
+
+
+def test_build_stacks_agent_threads_session_manager_into_the_agent(monkeypatch):
+    class _FakeSessionManager:
+        def __init__(self):
+            self.registered = False
+
+        def register_hooks(self, registry, **kwargs):
+            self.registered = True
+
+    fake_session_manager = _FakeSessionManager()
+    repo = InMemoryLibraryDataRepository()
+    seed_demo_library(repo, library_id="lib_demo")
+    claims = StaffIdentityClaims(role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review")
+    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS") and not os.environ.get("STACKS_BEDROCK_MODEL_ID"):
+        monkeypatch.setenv("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+
+    bundle = build_stacks_agent(repo, claims, session_id="sess_sm", session_manager=fake_session_manager)
+
+    assert bundle.agent._session_manager is fake_session_manager
+    assert fake_session_manager.registered is True
+
+
+def test_build_stacks_agent_with_no_session_manager_is_backward_compatible(monkeypatch):
+    """Every existing caller omits session_manager -- must keep working
+    exactly as before (agent._session_manager stays None, no hook added)."""
+    bundle = _build_bundle(monkeypatch)
+    assert bundle.agent._session_manager is None
+
+
+def test_build_stacks_agent_threads_pending_approvals_sink_to_the_hitl_gate(monkeypatch):
+    from stacks.hitl.hitl_gate import HitlGateHook
+    from stacks.hitl.pending_approvals import InMemoryPendingApprovalsSink
+    from strands.hooks import BeforeToolCallEvent
+
+    sink = InMemoryPendingApprovalsSink()
+    repo = InMemoryLibraryDataRepository()
+    seed_demo_library(repo, library_id="lib_demo")
+    claims = StaffIdentityClaims(role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review")
+    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS") and not os.environ.get("STACKS_BEDROCK_MODEL_ID"):
+        monkeypatch.setenv("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+
+    bundle = build_stacks_agent(repo, claims, session_id="sess_pa", pending_approvals_sink=sink)
+
+    hitl_gate_hooks = [
+        cb.__self__ for cb in bundle.agent.hooks._registered_callbacks.get(BeforeToolCallEvent, [])
+        if isinstance(cb.__self__, HitlGateHook)
+    ]
+    assert len(hitl_gate_hooks) == 1
+    assert hitl_gate_hooks[0]._pending_approvals_sink is sink
+    assert hitl_gate_hooks[0]._session_id == "sess_pa"

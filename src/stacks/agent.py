@@ -19,11 +19,13 @@ from typing import Callable
 
 from strands import Agent
 from strands.models import BedrockModel
+from strands.session.session_manager import SessionManager
 
 from stacks.data.repository import LibraryDataRepository
 from stacks.identity.claims import StaffIdentityClaims
 from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.hitl_gate import HitlGateHook
+from stacks.hitl.pending_approvals import PendingApprovalsSink
 from stacks.hitl.tier_ledger import TierLedger
 from stacks.hooks.audit_log import AuditLogHook, AuditLogSink
 from stacks.hooks.memory_event import MemoryEventHook
@@ -72,6 +74,8 @@ def build_stacks_agent(
     session_id: str,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     memory: MemoryStore | None = None,
+    pending_approvals_sink: PendingApprovalsSink | None = None,
+    session_manager: SessionManager | None = None,
 ) -> StacksAgentBundle:
     """Builds one Stacks Agent scoped to one library tenant and one session.
 
@@ -84,6 +88,14 @@ def build_stacks_agent(
     memory defaults to InMemoryMemoryStore() so every existing caller that
     doesn't pass one keeps working unchanged -- production/live-test
     callers pass a real AgentCoreMemoryStore explicitly.
+
+    pending_approvals_sink and session_manager both default to None so
+    every existing caller (Plan 1/2's ILL Specialist and Overdue Sequencer
+    wiring, this module's own tests) keeps working unmodified. Without
+    session_manager wired, a fresh Agent instance in a fresh process (the
+    normal case on every AgentCore Runtime invocation) has no way to
+    resume a paused interrupt from a prior invocation -- Task 5's main.py
+    is the first real caller to pass both.
     """
     library_id = claims.library_id
     memory = memory if memory is not None else InMemoryMemoryStore()
@@ -107,7 +119,10 @@ def build_stacks_agent(
     run_overdue_chase = make_run_overdue_chase(repo, overdue_cache, tier_ledger, library_id, now, memory)
     notify_parties = make_notify_parties(repo, notification_sink, tier_ledger, library_id)
 
-    hitl_gate = HitlGateHook(room_conflict_cache, ill_cache, overdue_cache, ill_disambiguation_cache)
+    hitl_gate = HitlGateHook(
+        room_conflict_cache, ill_cache, overdue_cache, ill_disambiguation_cache,
+        pending_approvals_sink=pending_approvals_sink, now=now, session_id=session_id,
+    )
     audit_log = AuditLogHook(audit_sink, session_id, library_id, tier_ledger=tier_ledger)
     memory_event = MemoryEventHook(memory, library_id)
 
@@ -150,6 +165,7 @@ def build_stacks_agent(
         # that (whole-branch review Important 4).
         hooks=[hitl_gate, audit_log, memory_event],
         system_prompt=SYSTEM_PROMPT,
+        session_manager=session_manager,
     )
 
     return StacksAgentBundle(agent, audit_sink, notification_sink)
