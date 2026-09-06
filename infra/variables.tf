@@ -63,3 +63,8 @@ variable "bedrock_foundation_model_arns" {
 variable "runtime_log_group_arn_pattern" {
   type = string
 }
+
+variable "budget_alert_email" {
+  description = "Email address AWS Budgets notifies at each threshold. Set this yourself -- not defaulted here."
+  type        = string
+}

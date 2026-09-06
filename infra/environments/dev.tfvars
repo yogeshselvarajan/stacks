@@ -54,3 +54,8 @@ bedrock_foundation_model_arns = [
 # The real CloudWatch Logs group ARN AgentCore Runtime created for this
 # deployment, confirmed via `aws logs describe-log-groups` at Task 10 time.
 runtime_log_group_arn_pattern = "arn:aws:logs:us-west-2:690845170953:log-group:/aws/bedrock-agentcore/runtimes/stacks_agent_runtime_dev-NaNK542U2G-DEFAULT:*"
+
+# Task 11 (AWS Budgets cost guardrail): the project owner's real email,
+# confirmed directly, for the $15 informational and $35 hard-stop alerts
+# per cost_estimate.md's already-decided thresholds.
+budget_alert_email = "yogeshselvarajan@gmail.com"
