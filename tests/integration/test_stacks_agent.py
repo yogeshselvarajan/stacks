@@ -253,6 +253,7 @@ def test_build_stacks_agent_threads_pending_approvals_sink_to_the_hitl_gate(monk
     ]
     assert len(hitl_gate_hooks) == 1
     assert hitl_gate_hooks[0]._pending_approvals_sink is sink
+    assert hitl_gate_hooks[0]._session_id == "sess_pa"
 
 
 @pytest.mark.skipif(
@@ -283,4 +284,3 @@ def test_bff_shaped_edit_then_approve_resumes_correctly_via_real_bedrock(monkeyp
     audit_records = bundle.audit_sink.all()
     committed = [r for r in audit_records if r.tool_name == "resolve_room_conflict" and r.outcome == "committed"]
     assert len(committed) == 1
-    assert hitl_gate_hooks[0]._session_id == "sess_pa"

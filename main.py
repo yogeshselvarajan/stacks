@@ -66,7 +66,29 @@ def _run_chat(payload: dict) -> dict:
         pending_approvals_sink=pending_approvals_sink, session_manager=session_manager,
     )
     result = bundle.agent(payload["prompt"])
-    return {"message": str(result.message), "stop_reason": getattr(result, "stop_reason", None)}
+    # I1 (Task 17 fix round): the BFF's write/resume endpoint needs to
+    # know whether a resumed commit actually happened before it deletes
+    # the PendingApprovals row and reports success -- stop_reason alone
+    # cannot distinguish "committed" from "blocked_missing_approval"
+    # (both finish the agent loop normally, not with stop_reason ==
+    # "interrupt"). audit_sink is a brand-new AuditLogSink() built fresh
+    # by build_stacks_agent for this single invocation only (see
+    # stacks/agent.py), so filtering it by tool name carries no
+    # cross-request/cross-tenant risk. getattr guards test doubles (e.g.
+    # tests/unit/test_main_entrypoint_wiring.py's _StubBundle) that don't
+    # define audit_sink at all.
+    audit_sink = getattr(bundle, "audit_sink", None)
+    tool_outcome = None
+    tool_name = payload.get("tool")
+    if tool_name and audit_sink is not None:
+        matching = [r for r in audit_sink.all() if r.tool_name == tool_name]
+        if matching:
+            tool_outcome = matching[-1].outcome
+    return {
+        "message": str(result.message),
+        "stop_reason": getattr(result, "stop_reason", None),
+        "tool_outcome": tool_outcome,
+    }
 
 
 def _run_overdue_sweep(payload: dict) -> dict:

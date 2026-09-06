@@ -69,6 +69,10 @@ def test_approve_deletes_the_pending_approvals_row_on_success(wired):
 
 def test_decline_submits_approved_false_and_still_deletes_the_row(wired):
     client, sink, fake_client = wired
+    # A decline resumes into HitlGateHook's own cancel_tool path -- the
+    # tool never commits. Override the shared fixture's "committed"
+    # default (meant for approve/edit) with the realistic decline outcome.
+    fake_client._response = {"status": "ok", "stop_reason": "end_turn", "tool_outcome": "blocked_missing_approval"}
     response = client.post("/api/approvals/b1:b2/decision", json={"action": "decline", "declineReason": "Wrong candidate."})
     assert response.status_code == 200
     payload = fake_client.calls[0]
@@ -122,3 +126,64 @@ def test_decision_for_an_unknown_case_id_returns_404(wired):
     client, sink, fake_client = wired
     response = client.post("/api/approvals/no_such_case/decision", json={"action": "approve"})
     assert response.status_code == 404
+
+
+# --- Task 17 fix round: I1 and I2 ---
+
+def _overdue_record():
+    return PendingApprovalRecord(
+        library_id="lib_demo", case_id="circ_1", tier="YELLOW", tool="run_overdue_chase",
+        workflow="overdue_chase", reason={"tier": "YELLOW"}, interrupt_id="v1:before_tool_call:def",
+        session_id="sess_write_test_3", created_at="2026-09-06T00:00:00+00:00",
+    )
+
+
+def test_edit_with_no_edited_value_returns_400_and_never_invokes_the_runtime(wired):
+    client, sink, fake_client = wired
+    response = client.post("/api/approvals/b1:b2/decision", json={"action": "edit"})
+    assert response.status_code == 400
+    assert fake_client.calls == []
+    assert any(r.case_id == "b1:b2" for r in sink.list_for_library("lib_demo"))
+
+
+def test_edit_for_a_workflow_with_no_editable_field_returns_400(monkeypatch):
+    sink = InMemoryPendingApprovalsSink()
+    sink.put(_overdue_record())
+    fake_client = FakeAgentRuntimeClient()
+    app.dependency_overrides[get_current_claims] = lambda: StaffIdentityClaims(
+        role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review"
+    )
+    app.dependency_overrides[get_pending_approvals_sink] = lambda: sink
+    app.dependency_overrides[get_agent_runtime_client] = lambda: fake_client
+    try:
+        client = TestClient(app)
+        response = client.post("/api/approvals/circ_1/decision", json={"action": "edit", "editedValue": "new message"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert fake_client.calls == []
+
+
+def test_approve_that_does_not_actually_commit_keeps_the_row_and_returns_an_error(wired):
+    client, sink, fake_client = wired
+    fake_client._response = {"status": "ok", "stop_reason": "end_turn", "tool_outcome": "blocked_missing_approval"}
+    response = client.post("/api/approvals/b1:b2/decision", json={"action": "approve"})
+    assert response.status_code == 502
+    assert any(r.case_id == "b1:b2" for r in sink.list_for_library("lib_demo"))
+
+
+def test_a_resume_that_is_still_paused_keeps_the_row_and_returns_an_error(wired):
+    client, sink, fake_client = wired
+    fake_client._response = {"status": "ok", "stop_reason": "interrupt", "tool_outcome": None}
+    response = client.post("/api/approvals/b1:b2/decision", json={"action": "approve"})
+    assert response.status_code == 502
+    assert any(r.case_id == "b1:b2" for r in sink.list_for_library("lib_demo"))
+
+
+def test_a_decline_that_unexpectedly_commits_keeps_the_row_and_returns_an_error(wired):
+    client, sink, fake_client = wired
+    fake_client._response = {"status": "ok", "stop_reason": "end_turn", "tool_outcome": "committed"}
+    response = client.post("/api/approvals/b1:b2/decision", json={"action": "decline"})
+    assert response.status_code == 500
+    assert any(r.case_id == "b1:b2" for r in sink.list_for_library("lib_demo"))

@@ -21,7 +21,12 @@ class AgentRuntimeClient(Protocol):
 class FakeAgentRuntimeClient:
     def __init__(self, response: dict[str, Any] | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
-        self._response = response or {"status": "ok"}
+        # Default canned response represents a genuinely resolved resume
+        # (stop_reason != "interrupt", tool_outcome == "committed") --
+        # matching main.py's real _run_chat response shape (Task 17 fix
+        # round, I1) so tests that don't care about the outcome check
+        # keep passing; tests that do pass their own response override.
+        self._response = response or {"status": "ok", "stop_reason": "end_turn", "tool_outcome": "committed"}
 
     def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(payload)
