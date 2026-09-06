@@ -4,11 +4,21 @@ from strands.interrupt import InterruptException
 
 from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.hitl_gate import HitlGateHook
+from stacks.hitl.pending_approvals import InMemoryPendingApprovalsSink
 from stacks.types import SensitivityFlag
 
 
 class _FakeToolUse(dict):
     """Minimal duck-typed stand-in for Strands' ToolUse dict."""
+
+
+class _FakeInterrupt:
+    """Minimal stand-in for strands.interrupt.Interrupt -- only the
+    attributes HitlGateHook's PendingApprovals write actually reads."""
+
+    def __init__(self, id: str, reason):
+        self.id = id
+        self.reason = reason
 
 
 class _FakeEvent:
@@ -32,7 +42,7 @@ class _FakeEvent:
     def interrupt(self, name: str, reason=None):
         self.interrupt_calls.append((name, reason))
         if self._interrupt_response is None:
-            raise InterruptException(name)
+            raise InterruptException(_FakeInterrupt(id=f"fake_interrupt:{name}", reason=reason))
         return self._interrupt_response
 
 
@@ -318,6 +328,88 @@ def test_ill_gate_sensitivity_flag_overrides_convergent_substitution_at_red():
         hook._gate(event)
     assert len(event.interrupt_calls) == 1
     assert event.interrupt_calls[0][1]["tier"] == "RED"
+
+
+def test_pending_approvals_sink_receives_a_write_when_an_interrupt_is_raised():
+    sink = InMemoryPendingApprovalsSink()
+    cache = EvaluationCache()
+    cache.put("lib_demo", "b1:b2", {
+        "conflict_id": "b1:b2",
+        "sensitivity_flags": [SensitivityFlag.MINOR_ACCOUNT.value],
+        "applicable_policy_clause": {"policy_name": "room_booking_priority", "clause_id": "RBP-1", "clause_text": "..."},
+        "candidate_resolutions": [{"booking_id_that_yields": "b1", "booking_id_that_keeps": "b2", "deterministic_score": 1.0, "rule_applied": "RBP-1"}],
+        "tie": False,
+    })
+    hook = HitlGateHook(cache, EvaluationCache(), EvaluationCache(), EvaluationCache(), pending_approvals_sink=sink, session_id="sess_gate_test")
+    event = _FakeEvent("resolve_room_conflict", {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
+
+    with pytest.raises(InterruptException):
+        hook._gate(event)
+
+    records = sink.list_for_library("lib_demo")
+    assert len(records) == 1
+    assert records[0].case_id == "b1:b2"
+    assert records[0].tier == "RED"
+    assert records[0].tool == "resolve_room_conflict"
+    assert records[0].workflow == "room_booking"
+    assert records[0].interrupt_id.startswith("fake_interrupt:")
+    assert records[0].session_id == "sess_gate_test"
+
+
+def test_no_pending_approvals_sink_is_backward_compatible():
+    """A caller that doesn't pass pending_approvals_sink (every existing
+    caller today) must keep working exactly as before -- no crash, no
+    write attempted."""
+    hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
+    event = _FakeEvent("resolve_room_conflict", {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"]})
+    with pytest.raises(InterruptException):
+        hook._gate(event)  # must not raise anything else (e.g. AttributeError on a None sink)
+
+
+def test_edit_value_overwrites_chosen_holding_id_on_ill_routing_resume():
+    hook = _hook_with_ill_cached("multiple_editions", [])
+    event = _FakeEvent(
+        "route_ill_request",
+        {"library_id": "lib_demo", "action": "commit", "ill_request_id": "ill_req_123", "chosen_holding_id": "hold_original"},
+        interrupt_response={"approved": True, "approver_role": "ill_coordinator", "edited_value": "hold_edited"},
+    )
+    hook._gate(event)
+    assert event.cancel_tool is False
+    assert event.tool_use["input"]["chosen_holding_id"] == "hold_edited"
+
+
+def test_edit_value_overwrites_chosen_resolution_booking_id_on_room_booking_resume():
+    hook = _hook_with_room_conflict_cached([SensitivityFlag.MINOR_ACCOUNT])
+    event = _FakeEvent(
+        "resolve_room_conflict",
+        {"library_id": "lib_demo", "action": "commit", "conflicting_booking_ids": ["b1", "b2"], "chosen_resolution_booking_id": "b1"},
+        interrupt_response={"approved": True, "approver_role": "librarian_case_review", "edited_value": "b2"},
+    )
+    hook._gate(event)
+    assert event.cancel_tool is False
+    assert event.tool_use["input"]["chosen_resolution_booking_id"] == "b2"
+
+
+def test_edit_value_is_ignored_for_overdue_chase_workflow():
+    """OVERDUE_CHASE has no closed-world candidate field to edit
+    (run_overdue_chase's commit takes free-text message_body, not a
+    chosen candidate id) -- an edited_value in the response must not
+    crash or silently invent a field."""
+    cache = EvaluationCache()
+    cache.put("lib_demo", "circ_1", {
+        "circulation_record_id": "circ_1", "tier_consequence": "fee_mention",
+        "sensitivity_flags": [], "has_recalled_hardship_history": False,
+        "applicable_policy_clause": {"policy_name": "overdue_escalation", "clause_id": "OD-1", "clause_text": "..."},
+    })
+    hook = HitlGateHook(EvaluationCache(), EvaluationCache(), cache, EvaluationCache())
+    event = _FakeEvent(
+        "run_overdue_chase",
+        {"library_id": "lib_demo", "action": "commit", "circulation_record_id": "circ_1"},
+        interrupt_response={"approved": True, "approver_role": "circulation_staff", "edited_value": "should_be_ignored"},
+    )
+    hook._gate(event)
+    assert event.cancel_tool is False
+    assert "edited_value" not in event.tool_use["input"]
 
 
 def test_ill_gate_policy_exception_overrides_convergent_substitution_at_red():

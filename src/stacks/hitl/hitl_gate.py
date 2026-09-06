@@ -5,7 +5,8 @@ docs/architecture/tool_architecture.md section 1 ("Single HITL choke point").
 """
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Callable
 
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 from strands.interrupt import InterruptException
@@ -20,6 +21,7 @@ from stacks.hitl.classify import (
 )
 from stacks.hitl.evaluation_cache import EvaluationCache
 from stacks.hitl.ill_disambiguation_verification import verify_resolved_via_substitution
+from stacks.hitl.pending_approvals import PendingApprovalRecord, PendingApprovalsSink
 from stacks.types import SensitivityFlag
 
 # Tool names whose "commit" action is HITL-gated, and which workflow
@@ -30,6 +32,22 @@ _GATED_COMMIT_TOOLS: dict[str, Workflow] = {
     "resolve_room_conflict": Workflow.ROOM_BOOKING,
     "route_ill_request": Workflow.ILL_ROUTING,
     "run_overdue_chase": Workflow.OVERDUE_CHASE,
+}
+
+# The one tool_input field each workflow's commit action treats as a
+# closed-world candidate id, overwritten here when a human's resume
+# response carries an edited_value. OVERDUE_CHASE deliberately absent:
+# run_overdue_chase's commit has no closed-world candidate field, only
+# free-text message_body, which the tool itself independently
+# re-validates against forbidden severity keywords and the cited clause.
+# Editing that message is a distinct, free-text concern, out of scope
+# for this generic passthrough. Neither tool's own validation is
+# duplicated here: resolve_room_conflict and route_ill_request already
+# re-check the overwritten value against their own cached evaluate
+# candidate set independently of this hook.
+_EDITABLE_FIELD_FOR_WORKFLOW: dict[Workflow, str] = {
+    Workflow.ROOM_BOOKING: "chosen_resolution_booking_id",
+    Workflow.ILL_ROUTING: "chosen_holding_id",
 }
 
 
@@ -48,6 +66,9 @@ class HitlGateHook(HookProvider):
         ill_cache: EvaluationCache,
         overdue_cache: EvaluationCache,
         ill_disambiguation_cache: EvaluationCache,
+        pending_approvals_sink: PendingApprovalsSink | None = None,
+        now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        session_id: str | None = None,
     ) -> None:
         self._caches: dict[Workflow, EvaluationCache] = {
             Workflow.ROOM_BOOKING: room_conflict_cache,
@@ -62,6 +83,16 @@ class HitlGateHook(HookProvider):
         # resolved_via_substitution claim instead of trusting it
         # (whole-branch review Critical 1).
         self._ill_disambiguation_cache = ill_disambiguation_cache
+        # Optional, backward-compatible: every existing HitlGateHook(...)
+        # call site keeps working unmodified with no sink wired at all,
+        # in which case a real interrupt raise simply skips the write
+        # below (no Approval Inbox visibility, same as today).
+        self._pending_approvals_sink = pending_approvals_sink
+        self._now = now
+        # Recorded on every PendingApprovals write so the BFF's resume
+        # endpoint (Task 17) knows which S3SessionManager(session_id=...)
+        # to reconstruct against later, in a different process.
+        self._session_id = session_id
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeToolCallEvent, self._gate)
@@ -121,12 +152,24 @@ class HitlGateHook(HookProvider):
                 event.cancel_tool = f"blocked_missing_approval: tier={tier.value}"
                 return
 
+            edited_field = _EDITABLE_FIELD_FOR_WORKFLOW.get(workflow)
+            edited_value = response.get("edited_value")
+            if edited_field is not None and edited_value is not None:
+                tool_input[edited_field] = edited_value
+
             tool_input["approval_token"] = {
                 "token": response.get("token", f"hitl_resume:{case_id}"),
                 "approver_role": resumed_role,
                 "related_action_id": related_action_id,
             }
-        except InterruptException:
+        except InterruptException as exc:
+            if self._pending_approvals_sink is not None:
+                self._pending_approvals_sink.put(PendingApprovalRecord(
+                    library_id=library_id, case_id=case_id, tier=tier.value, tool=tool_name,
+                    workflow=workflow.value, reason=exc.interrupt.reason,
+                    interrupt_id=exc.interrupt.id, session_id=self._session_id,
+                    created_at=self._now().isoformat(),
+                ))
             raise
 
 
