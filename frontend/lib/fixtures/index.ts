@@ -26,6 +26,11 @@ export const CALENDAR_FIXTURE: CalendarBooking[] = [
     bookingType: "recurring_program", status: "confirmed",
     conflictResolution: { resolvedTier: "GREEN", policyClauseId: "RBP-1", yieldingBookingId: "b_oneoff_a" },
   },
+  {
+    bookingId: "b_walkin_c", roomId: "room_b", start: "2026-09-03T10:00:00Z", end: "2026-09-03T11:00:00Z",
+    bookingType: "one_off", status: "pending_conflict",
+    pendingReview: { caseId: "b_recurring_c:b_walkin_c", tier: "YELLOW" },
+  },
 ];
 
 export const ILL_QUEUE_FIXTURE: IllRequest[] = [

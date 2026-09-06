@@ -21,6 +21,7 @@ export interface CalendarBooking {
   bookingType: string;
   status: "confirmed" | "cancelled" | "pending_conflict";
   conflictResolution?: { resolvedTier: Tier; policyClauseId: string; yieldingBookingId: string };
+  pendingReview?: { caseId: string; tier: "YELLOW" | "RED" };
 }
 
 export interface IllRequest {
