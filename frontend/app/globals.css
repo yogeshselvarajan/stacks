@@ -215,3 +215,27 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Signature resolve motion (docs/architecture/ui_ux_design_system.md
+   section 4.3): when a librarian resolves a YELLOW/RED Approval Inbox
+   card, it cross-fades and slides out with a colored trailing edge
+   matching the decision -- green for approve, neutral slate for
+   decline/reassign. Capped at 300ms via --motion-duration-drawer, the
+   signature easing curve, never longer than the panel motion ceiling. */
+.approval-card-resolving {
+  transition-property: opacity, transform, border-right-color;
+  transition-duration: var(--motion-duration-drawer);
+  transition-timing-function: var(--motion-ease-signature);
+  opacity: 0;
+  transform: translateX(12px);
+  border-right-style: solid;
+  border-right-width: 4px;
+}
+
+.approval-card-resolving--approve {
+  border-right-color: var(--color-tier-green-fill);
+}
+
+.approval-card-resolving--decline {
+  border-right-color: var(--color-ink-muted);
+}

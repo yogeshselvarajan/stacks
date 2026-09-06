@@ -1,0 +1,165 @@
+"use client";
+
+import { useState } from "react";
+import { ApprovalCase } from "@/lib/api/types";
+import { TierBadge } from "./tier-badge";
+
+type ActionStatus = "idle" | "submitting" | "error";
+
+const PRIMARY_BUTTON_CLASS =
+  "stacks-focus-ring rounded px-4 py-2 text-sm font-medium text-white transition-all hover:brightness-90 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60";
+const SECONDARY_BUTTON_CLASS =
+  "stacks-focus-ring rounded border px-4 py-2 text-sm font-medium transition-colors hover:bg-[var(--color-bg)] active:bg-[var(--color-border)] disabled:cursor-not-allowed disabled:opacity-60";
+
+export function ApprovalCaseDetail({
+  case: theCase,
+  onApprove,
+  onDecline,
+  onEdit,
+  actionStatus,
+}: {
+  case: ApprovalCase;
+  onApprove: (caseId: string) => void;
+  onDecline: (caseId: string, reason: string) => void;
+  onEdit: (caseId: string, editedValue: string) => void;
+  actionStatus: ActionStatus;
+}) {
+  const [mode, setMode] = useState<"view" | "edit" | "decline">("view");
+  const [editedValue, setEditedValue] = useState(theCase.candidates?.[0]?.id ?? "");
+  const [declineReason, setDeclineReason] = useState("");
+  const submitting = actionStatus === "submitting";
+
+  return (
+    <div className="max-w-xl space-y-4">
+      <TierBadge tier={theCase.tier} />
+      <p className="text-sm" style={{ color: "var(--color-ink)" }}>{theCase.summary}</p>
+
+      {theCase.candidates && (
+        <ul className="list-inside list-disc text-sm" style={{ color: "var(--color-ink)" }}>
+          {theCase.candidates.map((candidate) => (
+            <li key={candidate.id}>{candidate.label}</li>
+          ))}
+        </ul>
+      )}
+
+      {theCase.recallSummary && (
+        <p
+          className="rounded-lg border p-3 text-sm"
+          style={{ borderColor: "var(--color-border)", background: "var(--color-bg)", color: "var(--color-ink-muted)" }}
+        >
+          {theCase.recallSummary}
+        </p>
+      )}
+
+      {actionStatus === "error" && (
+        <p
+          role="alert"
+          className="rounded-lg border p-3 text-sm"
+          style={{ borderColor: "var(--color-border)", background: "var(--color-tier-red-bg)", color: "var(--color-tier-red-text)" }}
+        >
+          Could not submit your decision. Check your connection and try again.
+        </p>
+      )}
+
+      {mode === "edit" && theCase.candidates && (
+        <div className="space-y-2">
+          <div>
+            <label htmlFor="edit-select" className="mb-1 block text-sm font-medium" style={{ color: "var(--color-ink)" }}>
+              Choose a different outcome
+            </label>
+            <select
+              id="edit-select"
+              className="stacks-focus-ring w-full rounded border px-3 py-2 text-sm"
+              style={{ borderColor: "var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink)" }}
+              value={editedValue}
+              onChange={(e) => setEditedValue(e.target.value)}
+            >
+              {theCase.candidates.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>{candidate.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={PRIMARY_BUTTON_CLASS}
+              style={{ background: "var(--color-accent)" }}
+              disabled={submitting}
+              onClick={() => onEdit(theCase.caseId, editedValue)}
+            >
+              {submitting ? "Submitting..." : "Confirm edit"}
+            </button>
+            <button type="button" className={SECONDARY_BUTTON_CLASS} style={{ borderColor: "var(--color-border)", color: "var(--color-ink)" }} disabled={submitting} onClick={() => setMode("view")}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === "decline" && (
+        <div className="space-y-2">
+          <div>
+            <label htmlFor="decline-reason" className="mb-1 block text-sm font-medium" style={{ color: "var(--color-ink)" }}>
+              Reason for declining
+            </label>
+            <input
+              id="decline-reason"
+              className="stacks-focus-ring w-full rounded border px-3 py-2 text-sm"
+              style={{ borderColor: "var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink)" }}
+              value={declineReason}
+              onChange={(e) => setDeclineReason(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={PRIMARY_BUTTON_CLASS}
+              style={{ background: "var(--color-tier-red-fill)" }}
+              disabled={submitting || !declineReason}
+              onClick={() => onDecline(theCase.caseId, declineReason)}
+            >
+              {submitting ? "Submitting..." : "Confirm decline"}
+            </button>
+            <button type="button" className={SECONDARY_BUTTON_CLASS} style={{ borderColor: "var(--color-border)", color: "var(--color-ink)" }} disabled={submitting} onClick={() => setMode("view")}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === "view" && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            style={{ background: "var(--color-tier-green-fill)" }}
+            disabled={submitting}
+            onClick={() => onApprove(theCase.caseId)}
+          >
+            {submitting ? "Approving..." : "Approve"}
+          </button>
+          <button
+            type="button"
+            className={SECONDARY_BUTTON_CLASS}
+            style={{ borderColor: "var(--color-border)", color: "var(--color-ink)" }}
+            disabled={submitting}
+            onClick={() => setMode("decline")}
+          >
+            Decline
+          </button>
+          {theCase.candidates && (
+            <button
+              type="button"
+              className={SECONDARY_BUTTON_CLASS}
+              style={{ borderColor: "var(--color-border)", color: "var(--color-ink)" }}
+              disabled={submitting}
+              onClick={() => setMode("edit")}
+            >
+              Edit
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
