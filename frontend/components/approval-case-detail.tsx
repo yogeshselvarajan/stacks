@@ -83,7 +83,7 @@ export function ApprovalCaseDetail({
             <button
               type="button"
               className={PRIMARY_BUTTON_CLASS}
-              style={{ background: "var(--color-accent)" }}
+              style={{ background: "var(--color-accent)", color: "#FFFFFF" }}
               disabled={submitting}
               onClick={() => onEdit(theCase.caseId, editedValue)}
             >
