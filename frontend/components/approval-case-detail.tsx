@@ -17,12 +17,14 @@ export function ApprovalCaseDetail({
   onDecline,
   onEdit,
   actionStatus,
+  resolving,
 }: {
   case: ApprovalCase;
   onApprove: (caseId: string) => void;
   onDecline: (caseId: string, reason: string) => void;
   onEdit: (caseId: string, editedValue: string) => void;
   actionStatus: ActionStatus;
+  resolving: boolean;
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "decline">("view");
   const [editedValue, setEditedValue] = useState(theCase.candidates?.[0]?.id ?? "");
@@ -30,9 +32,20 @@ export function ApprovalCaseDetail({
   const submitting = actionStatus === "submitting";
 
   return (
-    <div className="max-w-xl space-y-4">
+    <div className={resolving ? "space-y-4 approval-detail-resolving" : "space-y-4"}>
       <TierBadge tier={theCase.tier} />
       <p className="text-sm" style={{ color: "var(--color-ink)" }}>{theCase.summary}</p>
+
+      {theCase.tier === "YELLOW" && (
+        <label
+          data-testid="trust-mode-toggle"
+          className="flex items-center gap-2 text-sm"
+          style={{ color: "var(--color-ink-muted)" }}
+        >
+          <input type="checkbox" className="stacks-focus-ring" />
+          Apply automatically for this tool for the rest of my session
+        </label>
+      )}
 
       {theCase.candidates && (
         <ul className="list-inside list-disc text-sm" style={{ color: "var(--color-ink)" }}>
