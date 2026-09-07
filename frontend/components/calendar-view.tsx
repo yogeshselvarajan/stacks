@@ -87,7 +87,16 @@ export function CalendarView({ bookings, status }: { bookings: CalendarBooking[]
           <tr><td colSpan={4} className="px-4 py-6 text-center" style={{ color: "var(--color-ink-muted)" }}>No bookings for this room and date range. Try a different room or week.</td></tr>
         )}
         {status === "ready" && bookings.map((b) => (
-          <tr key={b.bookingId} style={{ borderBottom: "1px solid var(--color-border)" }}>
+          <tr
+            key={b.bookingId}
+            style={{
+              borderBottom: "1px solid var(--color-border)",
+              backgroundImage:
+                b.status === "pending_conflict"
+                  ? "repeating-linear-gradient(45deg, var(--color-tier-red-bg), var(--color-tier-red-bg) 4px, transparent 4px, transparent 8px)"
+                  : undefined,
+            }}
+          >
             <td className="px-4 py-2" style={{ fontFamily: "var(--font-mono)" }}>{b.roomId}</td>
             <td className="px-4 py-2" style={{ fontVariantNumeric: "tabular-nums" }}>{b.start}</td>
             <td className="px-4 py-2" style={{ fontVariantNumeric: "tabular-nums" }}>{b.end}</td>

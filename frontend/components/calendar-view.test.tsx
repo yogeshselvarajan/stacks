@@ -56,3 +56,11 @@ describe("CalendarView", () => {
     expect(disabled).toHaveAttribute("aria-disabled", "true");
   });
 });
+
+describe("CalendarView conflict rows", () => {
+  it("a pending-conflict row gets the diagonal-hatch background pattern, not just a badge color", () => {
+    render(<CalendarView bookings={CALENDAR_FIXTURE} status="ready" />);
+    const conflictRow = screen.getByText("room_b").closest("tr");
+    expect(conflictRow?.style.backgroundImage).toContain("repeating-linear-gradient");
+  });
+});
