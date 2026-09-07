@@ -20,7 +20,7 @@ export default function IllQueuePage() {
   }, []);
 
   return (
-    <AppShell role="ill_coordinator" pendingCounts={{ approvals: 0 }} activeRoute="/ill-queue">
+    <AppShell role="ill_coordinator" tenantName="Central Branch" pendingCounts={{ approvals: 0 }} activeRoute="/ill-queue">
       <IllQueueView requests={requests} status={status} />
     </AppShell>
   );

@@ -20,7 +20,7 @@ export default function AuditPage() {
   }, []);
 
   return (
-    <AppShell role="branch_manager" pendingCounts={{ approvals: 0 }} activeRoute="/audit">
+    <AppShell role="branch_manager" tenantName="Central Branch" pendingCounts={{ approvals: 0 }} activeRoute="/audit">
       <AuditTrailView entries={entries} status={status} mode="list" />
     </AppShell>
   );

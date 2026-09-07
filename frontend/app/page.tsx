@@ -23,6 +23,7 @@ export default function HomePage() {
   return (
     <AppShell
       role="branch_manager"
+      tenantName="Central Branch"
       pendingCounts={{ approvals: (pendingByTier?.YELLOW ?? 0) + (pendingByTier?.RED ?? 0) }}
       activeRoute="/"
     >

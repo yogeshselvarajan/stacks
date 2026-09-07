@@ -40,7 +40,7 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <AppShell role="branch_manager" pendingCounts={{ approvals: cases.length }} activeRoute="/approvals">
+    <AppShell role="branch_manager" tenantName="Central Branch" pendingCounts={{ approvals: cases.length }} activeRoute="/approvals">
       <ApprovalInboxView cases={cases} status={status} onResolve={handleResolve} resolvingCaseId={resolvingCaseId} />
     </AppShell>
   );

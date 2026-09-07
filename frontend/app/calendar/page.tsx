@@ -15,7 +15,7 @@ export default function CalendarPage() {
   }, []);
 
   return (
-    <AppShell role="room_booking_staff" pendingCounts={{ approvals: 0 }} activeRoute="/calendar">
+    <AppShell role="room_booking_staff" tenantName="Central Branch" pendingCounts={{ approvals: 0 }} activeRoute="/calendar">
       <CalendarView bookings={bookings} status={status} />
     </AppShell>
   );

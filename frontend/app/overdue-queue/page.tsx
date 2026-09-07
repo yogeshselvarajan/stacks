@@ -20,7 +20,7 @@ export default function OverdueQueuePage() {
   }, []);
 
   return (
-    <AppShell role="circulation_staff" pendingCounts={{ approvals: 0 }} activeRoute="/overdue-queue">
+    <AppShell role="circulation_staff" tenantName="Central Branch" pendingCounts={{ approvals: 0 }} activeRoute="/overdue-queue">
       <OverdueQueueView cases={cases} status={status} />
     </AppShell>
   );
