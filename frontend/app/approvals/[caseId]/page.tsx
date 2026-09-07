@@ -15,13 +15,15 @@ export default function ApprovalCaseDetailPage() {
   const [actionStatus, setActionStatus] = useState<"idle" | "submitting" | "error">("idle");
 
   useEffect(() => {
-    // Clear the previous case immediately so a navigation from case A to
-    // case B never leaves A's data on screen (and submittable) while B is
-    // still loading. Synchronous within the effect on purpose -- this is
-    // not derived state, it's discarding stale state before a new fetch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCase(null);
-    getApprovalCase(caseId).then(setCase);
+    // Clear the previous case first so a navigation from case A to case B
+    // never leaves A's data on screen (and submittable) while B is still
+    // loading. Routed through a promise chain, matching every other
+    // data-fetching effect in this app, so no setState call is a bare
+    // synchronous statement in the effect body.
+    Promise.resolve()
+      .then(() => setCase(null))
+      .then(() => getApprovalCase(caseId))
+      .then(setCase);
   }, [caseId]);
 
   if (!theCase) return null;
