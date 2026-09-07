@@ -137,33 +137,55 @@
    Step 3 (button, card, table, tabs, badge, skeleton, dialog, toast) still
    read its --color-background/--color-card/--color-ring/etc tokens. */
 @theme {
-  /* Core palette, light (docs/architecture/ui_ux_design_system.md section 1.2) */
-  --color-ink: #14302E;
-  --color-ink-muted: #3F5957;
-  --color-accent: #1D4ED8;
-  --color-accent-hover: #1E40AF;
-  --color-bg: #FAF8F3;
-  --color-surface: #FFFFFF;
-  --color-border: #E4DFD3;
+  /* Core palette, Console Dark (dark is the unconditional default --
+     docs/superpowers/specs/2026-09-07-stacks-visual-redesign-design.md
+     section 2.1). Light values live in the :root[data-theme="light"] and
+     prefers-color-scheme:light blocks below. */
+  --color-ink: #E8ECEF;
+  --color-ink-muted: #7C8891;
+  --color-ink-faint: #4A545E;
+  --color-accent: #5B8DEF;
+  --color-accent-hover: #7BA3F5;
+  --color-bg: #0A0E11;
+  --color-surface: #12171C;
+  --color-surface-2: #1B222A;
+  --color-border: #202832;
 
-  /* HITL tier colors (section 1.3) */
-  --color-tier-green-text: #15803D;
-  --color-tier-green-bg: #F0FDF4;
-  --color-tier-green-fill: #16A34A;
-  --color-tier-yellow-text: #B45309;
-  --color-tier-yellow-bg: #FFFBEB;
-  --color-tier-yellow-fill: #D97706;
-  --color-tier-red-text: #B91C1C;
-  --color-tier-red-bg: #FEF2F2;
-  --color-tier-red-fill: #DC2626;
+  /* Text color to place on top of a SOLID tier-fill background (badge
+     fills, the nav approval-count pill, filled Approve/Decline buttons).
+     Near-black in dark mode because the bright dark-mode tier fills below
+     need dark text for contrast; white in light mode, where the tier
+     fills are darker saturated colors (design spec section 2.2). Never
+     use a literal text-white Tailwind class next to a tier-fill
+     background -- use this token instead. */
+  --color-fill-text: #0A0E11;
 
-  /* Typography (section 2) */
+  /* The one elevation exception (design spec section 2.3): floating
+     elements only (dropdowns, tooltips, modals -- the existing z-20/z-50
+     layers). Every other surface uses --color-border + tiering, no
+     shadow. */
+  --shadow-floating: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
+
+  /* HITL tier colors, dark (design spec section 2.2) */
+  --color-tier-green-text: #4ADE80;
+  --color-tier-green-bg: rgba(52, 211, 153, 0.12);
+  --color-tier-green-fill: #34D399;
+  --color-tier-yellow-text: #FBBF24;
+  --color-tier-yellow-bg: rgba(240, 180, 41, 0.12);
+  --color-tier-yellow-fill: #F0B429;
+  --color-tier-red-text: #F87171;
+  --color-tier-red-bg: rgba(240, 71, 71, 0.12);
+  --color-tier-red-fill: #F04747;
+
+  /* Typography (docs/architecture/ui_ux_design_system.md section 2) --
+     unchanged by this plan. */
   --font-heading: "Lexend", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  /* Motion (section 4.2). Named once, referenced everywhere -- never an
-     ad hoc transition value elsewhere in the app. */
+  /* Motion (section 4.2) -- unchanged by this plan. Named once,
+     referenced everywhere -- never an ad hoc transition value elsewhere
+     in the app. */
   --motion-duration-feedback: 150ms;
   --motion-duration-panel: 250ms;
   --motion-duration-drawer: 300ms;
@@ -173,25 +195,51 @@
   --motion-ease-close: ease-in;
 }
 
-:root[data-theme="dark"] {
-  --color-ink: #E8F1EF;
-  --color-ink-muted: #9FB8B5;
-  --color-accent: #5B8DEF;
-  --color-accent-hover: #7BA3F5;
-  --color-bg: #0E1615;
-  --color-surface: #152321;
-  --color-border: #28403D;
+:root[data-theme="light"] {
+  --color-ink: #0F172A;
+  --color-ink-muted: #5B6472;
+  --color-ink-faint: #8A93A0;
+  --color-accent: #3B6FE0;
+  --color-accent-hover: #2F5BC7;
+  --color-bg: #F7F8FA;
+  --color-surface: #FFFFFF;
+  --color-surface-2: #F0F2F5;
+  --color-border: #E1E4E8;
+  --color-fill-text: #FFFFFF;
+  --shadow-floating: 0 8px 24px -4px rgba(15, 23, 42, 0.12);
+  --color-tier-green-text: #15803D;
+  --color-tier-green-bg: #F0FDF4;
+  --color-tier-green-fill: #16A34A;
+  --color-tier-yellow-text: #B45309;
+  --color-tier-yellow-bg: #FFFBEB;
+  --color-tier-yellow-fill: #D97706;
+  --color-tier-red-text: #B91C1C;
+  --color-tier-red-bg: #FEF2F2;
+  --color-tier-red-fill: #DC2626;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --color-ink: #E8F1EF;
-    --color-ink-muted: #9FB8B5;
-    --color-accent: #5B8DEF;
-    --color-accent-hover: #7BA3F5;
-    --color-bg: #0E1615;
-    --color-surface: #152321;
-    --color-border: #28403D;
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --color-ink: #0F172A;
+    --color-ink-muted: #5B6472;
+    --color-ink-faint: #8A93A0;
+    --color-accent: #3B6FE0;
+    --color-accent-hover: #2F5BC7;
+    --color-bg: #F7F8FA;
+    --color-surface: #FFFFFF;
+    --color-surface-2: #F0F2F5;
+    --color-border: #E1E4E8;
+    --color-fill-text: #FFFFFF;
+    --shadow-floating: 0 8px 24px -4px rgba(15, 23, 42, 0.12);
+    --color-tier-green-text: #15803D;
+    --color-tier-green-bg: #F0FDF4;
+    --color-tier-green-fill: #16A34A;
+    --color-tier-yellow-text: #B45309;
+    --color-tier-yellow-bg: #FFFBEB;
+    --color-tier-yellow-fill: #D97706;
+    --color-tier-red-text: #B91C1C;
+    --color-tier-red-bg: #FEF2F2;
+    --color-tier-red-fill: #DC2626;
   }
 }
 
@@ -201,7 +249,7 @@ body {
   font-family: var(--font-body);
 }
 
-/* Custom focus ring (spec section 4, craft-bar item 2): never the browser
+/* Custom focus ring (design system section 8): never the browser
    default, visible and high-contrast on every interactive element. */
 .stacks-focus-ring:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -216,26 +264,23 @@ body {
   }
 }
 
-/* Signature resolve motion (docs/architecture/ui_ux_design_system.md
-   section 4.3): when a librarian resolves a YELLOW/RED Approval Inbox
-   card, it cross-fades and slides out with a colored trailing edge
-   matching the decision -- green for approve, neutral slate for
-   decline/reassign. Capped at 300ms via --motion-duration-drawer, the
-   signature easing curve, never longer than the panel motion ceiling. */
-.approval-card-resolving {
-  transition-property: opacity, transform, border-right-color;
-  transition-duration: var(--motion-duration-drawer);
+/* Signature resolve motion, redefined for the list+detail Approval Inbox
+   (design spec section 4): resolving a case cross-fades the detail
+   pane's content while its row in the list simultaneously collapses.
+   Replaces the old stacked-card slide-out (.approval-card-resolving). */
+.approval-row-collapsing {
+  transition-property: opacity, transform;
+  transition-duration: var(--motion-duration-panel);
   transition-timing-function: var(--motion-ease-signature);
   opacity: 0;
-  transform: translateX(12px);
-  border-right-style: solid;
-  border-right-width: 4px;
+  transform: scaleY(0);
+  transform-origin: top;
+  overflow: hidden;
 }
 
-.approval-card-resolving--approve {
-  border-right-color: var(--color-tier-green-fill);
-}
-
-.approval-card-resolving--decline {
-  border-right-color: var(--color-ink-muted);
+.approval-detail-resolving {
+  transition-property: opacity;
+  transition-duration: var(--motion-duration-panel);
+  transition-timing-function: var(--motion-ease-signature);
+  opacity: 0.3;
 }
