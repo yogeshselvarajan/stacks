@@ -52,7 +52,7 @@ export function AppShell({
           <div key={group.label} className="mb-4">
             <p
               className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wide"
-              style={{ fontFamily: "var(--font-mono)", color: "var(--color-ink-faint)" }}
+              style={{ fontFamily: "var(--font-mono)", color: "var(--color-ink-muted)" }}
             >
               {group.label}
             </p>

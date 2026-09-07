@@ -9,7 +9,7 @@ type ActionStatus = "idle" | "submitting" | "error";
 const PRIMARY_BUTTON_CLASS =
   "stacks-focus-ring rounded px-4 py-2 text-sm font-medium transition-all hover:brightness-90 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60";
 const SECONDARY_BUTTON_CLASS =
-  "stacks-focus-ring rounded border px-4 py-2 text-sm font-medium transition-colors hover:bg-[var(--color-bg)] active:bg-[var(--color-border)] disabled:cursor-not-allowed disabled:opacity-60";
+  "stacks-focus-ring rounded border px-4 py-2 text-sm font-medium transition-colors hover:bg-[var(--color-surface-2)] active:bg-[var(--color-border)] disabled:cursor-not-allowed disabled:opacity-60";
 
 export function ApprovalCaseDetail({
   case: theCase,
@@ -62,7 +62,7 @@ export function ApprovalCaseDetail({
       {theCase.recallSummary && (
         <p
           className="rounded-lg border p-3 text-sm"
-          style={{ borderColor: "var(--color-border)", background: "var(--color-bg)", color: "var(--color-ink-muted)" }}
+          style={{ borderColor: "var(--color-border)", background: "var(--color-surface-2)", color: "var(--color-ink-muted)" }}
         >
           {theCase.recallSummary}
         </p>
@@ -100,7 +100,7 @@ export function ApprovalCaseDetail({
             <button
               type="button"
               className={PRIMARY_BUTTON_CLASS}
-              style={{ background: "var(--color-accent)", color: "#FFFFFF" }}
+              style={{ background: "var(--color-accent)", color: "var(--color-fill-text)" }}
               disabled={submitting}
               onClick={() => onEdit(theCase.caseId, editedValue)}
             >

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ApprovalCase, Tier } from "@/lib/api/types";
-import { CardSkeleton } from "./skeletons";
+import { ListRowSkeleton } from "./skeletons";
 
 type Status = "loading" | "ready" | "error";
 
@@ -27,9 +27,10 @@ export function ApprovalInboxView({
 }) {
   if (status === "loading") {
     return (
-      <div className="space-y-2">
-        <CardSkeleton />
-        <CardSkeleton />
+      <div className="space-y-0.5">
+        <ListRowSkeleton />
+        <ListRowSkeleton />
+        <ListRowSkeleton />
       </div>
     );
   }
@@ -85,6 +86,9 @@ export function ApprovalInboxView({
                 className="h-1.5 w-1.5 shrink-0 rounded-full"
                 style={{ background: TIER_DOT_COLOR[c.tier] }}
               />
+              <span className="sr-only">
+                {c.tier === "RED" ? "Requires review" : c.tier === "YELLOW" ? "Awaiting confirmation" : "Auto-executed"}
+              </span>
               <span className="truncate">{c.summary}</span>
             </Link>
           </li>

@@ -40,7 +40,7 @@ export function LoginView({
           className="stacks-focus-ring mb-3 w-full rounded border px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           style={{
             borderColor: "var(--color-border)",
-            background: "var(--color-bg)",
+            background: "var(--color-surface-2)",
             color: "var(--color-ink)",
             transitionDuration: "var(--motion-duration-feedback)",
             transitionTimingFunction: "var(--motion-ease-feedback)",
@@ -62,7 +62,7 @@ export function LoginView({
           className="stacks-focus-ring mb-4 w-full rounded border px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           style={{
             borderColor: "var(--color-border)",
-            background: "var(--color-bg)",
+            background: "var(--color-surface-2)",
             color: "var(--color-ink)",
             transitionDuration: "var(--motion-duration-feedback)",
             transitionTimingFunction: "var(--motion-ease-feedback)",
@@ -85,9 +85,10 @@ export function LoginView({
         <button
           type="submit"
           disabled={busy}
-          className="stacks-focus-ring w-full rounded px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-hover)] active:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+          className="stacks-focus-ring w-full rounded px-4 py-2 text-sm font-medium transition-colors hover:bg-[var(--color-accent-hover)] active:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
           style={{
             background: "var(--color-accent)",
+            color: "var(--color-fill-text)",
             transitionDuration: "var(--motion-duration-feedback)",
             transitionTimingFunction: "var(--motion-ease-feedback)",
           }}

@@ -35,7 +35,7 @@ describe("HomeView", () => {
         recentActivity={[]}
       />
     );
-    expect(screen.getByText("Resolved today")).toBeInTheDocument();
+    expect(screen.getByText("Agent actions today")).toBeInTheDocument();
     expect(screen.getByText("17")).toBeInTheDocument();
   });
 

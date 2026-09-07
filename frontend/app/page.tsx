@@ -24,19 +24,27 @@ export default function HomePage() {
   const [recentActivity, setRecentActivity] = useState<AuditEntry[] | null>(null);
 
   useEffect(() => {
-    Promise.all([getApprovals(), getAuditList()])
-      .then(([cases, audit]) => {
+    getApprovals()
+      .then((cases) => {
         const counts = { GREEN: 0, YELLOW: 0, RED: 0 };
         for (const c of cases) counts[c.tier] += 1;
         setPendingByTier(counts);
-
-        const sorted = [...audit].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setRecentActivity(sorted.slice(0, 5));
-        setResolvedTodayCount(audit.filter((e) => isToday(e.timestamp)).length);
-
         setStatus("ready");
       })
       .catch(() => setStatus("error"));
+
+    getAuditList()
+      .then((audit) => {
+        const sorted = [...audit].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setRecentActivity(sorted.slice(0, 5));
+        setResolvedTodayCount(audit.filter((e) => isToday(e.timestamp)).length);
+      })
+      .catch(() => {
+        // Supplementary data -- a failure here should not block the page or
+        // hide the pending-tier counts, which is the number that actually
+        // matters. resolvedTodayCount/recentActivity simply stay null, and
+        // HomeView's ready-state rendering already handles null for both.
+      });
   }, []);
 
   return (

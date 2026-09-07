@@ -58,10 +58,10 @@ export function HomeView({
         Welcome back
       </h1>
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className={lastSweepSummary ? "grid grid-cols-4 gap-3" : "grid grid-cols-3 gap-3"}>
         <KpiCard label="Red pending" value={red} valueColor="var(--color-tier-red-text)" />
         <KpiCard label="Yellow pending" value={yellow} valueColor="var(--color-tier-yellow-text)" />
-        <KpiCard label="Resolved today" value={resolvedTodayCount ?? 0} />
+        <KpiCard label="Agent actions today" value={resolvedTodayCount ?? 0} />
         {lastSweepSummary && (
           <div className="rounded-lg border p-3" style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}>
             <p className="text-xs font-medium uppercase tracking-wide" style={{ fontFamily: "var(--font-mono)", color: "var(--color-ink-muted)" }}>

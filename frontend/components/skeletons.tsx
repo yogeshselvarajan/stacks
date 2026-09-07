@@ -14,6 +14,23 @@ export function RowSkeleton({ columns }: { columns: number }) {
   );
 }
 
+export function ListRowSkeleton() {
+  return (
+    <div className="flex items-center gap-2 rounded-md px-3 py-2.5">
+      <div
+        aria-hidden="true"
+        className="h-1.5 w-1.5 shrink-0 rounded-full animate-pulse"
+        style={{ background: "var(--color-surface-2)" }}
+      />
+      <div
+        data-testid="skeleton-line"
+        className="h-3.5 w-2/3 animate-pulse rounded"
+        style={{ background: "var(--color-surface-2)" }}
+      />
+    </div>
+  );
+}
+
 export function CardSkeleton() {
   return (
     <div className="rounded-lg border p-4" style={{ borderColor: "var(--color-border)" }}>

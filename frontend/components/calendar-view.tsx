@@ -93,7 +93,7 @@ export function CalendarView({ bookings, status }: { bookings: CalendarBooking[]
               borderBottom: "1px solid var(--color-border)",
               backgroundImage:
                 b.status === "pending_conflict"
-                  ? "repeating-linear-gradient(45deg, var(--color-tier-red-bg), var(--color-tier-red-bg) 4px, transparent 4px, transparent 8px)"
+                  ? "repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-tier-red-fill) 25%, transparent), color-mix(in srgb, var(--color-tier-red-fill) 25%, transparent) 4px, transparent 4px, transparent 8px)"
                   : undefined,
             }}
           >
