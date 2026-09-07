@@ -54,4 +54,11 @@ describe("LoginView", () => {
     expect(screen.getByLabelText("Username")).toBeRequired();
     expect(screen.getByLabelText("Password")).toBeRequired();
   });
+
+  it("the login card sits on the surface token with a hairline border, not the canvas background", () => {
+    const { container } = render(<LoginView onSubmit={vi.fn()} status="idle" errorMessage={null} />);
+    const form = container.querySelector("form") as HTMLElement;
+    expect(form.style.background).toBe("var(--color-surface)");
+    expect(form.style.borderColor).toBe("var(--color-border)");
+  });
 });

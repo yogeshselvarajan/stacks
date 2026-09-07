@@ -32,4 +32,14 @@ describe("OverdueQueueView", () => {
     render(<OverdueQueueView cases={[]} status="error" />);
     expect(screen.getByText(/failed to load the overdue queue/i)).toBeInTheDocument();
   });
+
+  it("each tier-history step pill uses the surface-2 nested-fill token, not the canvas background token", () => {
+    render(<OverdueQueueView cases={OVERDUE_QUEUE_FIXTURE} status="ready" />);
+    // "Informational" renders inside a nested <span class="font-medium">; the
+    // pill with the background style is that span's PARENT, not an ancestor
+    // reachable via .closest("span") (which matches the inner span itself
+    // before ever walking up).
+    const stepPill = screen.getByText("Informational").parentElement;
+    expect(stepPill?.style.background).toBe("var(--color-surface-2)");
+  });
 });

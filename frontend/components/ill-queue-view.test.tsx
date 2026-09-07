@@ -87,4 +87,11 @@ describe("IllQueueView", () => {
     expect(disabled).toHaveAttribute("aria-disabled", "true");
     expect(disabled).toHaveTextContent("Unrouted Title");
   });
+
+  it("the expanded detail row uses the surface-2 nested-fill token, not the canvas background token", () => {
+    render(<IllQueueView requests={ILL_QUEUE_FIXTURE} status="ready" />);
+    fireEvent.click(screen.getByRole("button", { name: /Left Hand of Darkness/ }));
+    const detailCell = screen.getByText("The specialist's reasoning").closest("td");
+    expect(detailCell?.style.background).toBe("var(--color-surface-2)");
+  });
 });

@@ -32,4 +32,10 @@ describe("AuditTrailView", () => {
     expect(items[0]).toHaveTextContent("resolve_room_conflict");
     expect(items[1]).toHaveTextContent("notify_parties");
   });
+
+  it("the trace-mode loading skeleton lines use the surface-2 fill token, not the border token", () => {
+    const { container } = render(<AuditTrailView entries={[]} status="loading" mode="trace" />);
+    const line = container.querySelector("[data-testid='skeleton-line']") as HTMLElement;
+    expect(line.style.background).toBe("var(--color-surface-2)");
+  });
 });
