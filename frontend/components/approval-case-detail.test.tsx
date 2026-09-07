@@ -100,4 +100,9 @@ describe("ApprovalCaseDetail", () => {
     rerender(<ApprovalCaseDetail case={RED_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="submitting" resolving={true} />);
     expect(container.firstElementChild?.className).toContain("approval-detail-resolving");
   });
+
+  it("the trust-mode toggle checkbox is disabled while a decision is submitting", () => {
+    render(<ApprovalCaseDetail case={YELLOW_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="submitting" resolving={true} />);
+    expect(screen.getByTestId("trust-mode-toggle").querySelector("input[type='checkbox']")).toBeDisabled();
+  });
 });

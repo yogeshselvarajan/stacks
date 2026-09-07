@@ -42,7 +42,11 @@ export function ApprovalCaseDetail({
           className="flex items-center gap-2 text-sm"
           style={{ color: "var(--color-ink-muted)" }}
         >
-          <input type="checkbox" className="stacks-focus-ring" />
+          <input
+            type="checkbox"
+            className="stacks-focus-ring transition-colors hover:brightness-90 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={submitting}
+          />
           Apply automatically for this tool for the rest of my session
         </label>
       )}
