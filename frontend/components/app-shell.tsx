@@ -53,8 +53,8 @@ export function AppShell({
                   {countKey && count > 0 && (
                     <span
                       data-testid={`${countKey}-count`}
-                      className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
-                      style={{ background: "var(--color-tier-red-fill)" }}
+                      className="rounded-full px-2 py-0.5 text-xs font-semibold"
+                      style={{ background: "var(--color-tier-red-fill)", color: "var(--color-fill-text)" }}
                     >
                       {count}
                     </span>

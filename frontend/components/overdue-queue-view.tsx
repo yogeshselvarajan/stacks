@@ -63,7 +63,7 @@ export function OverdueQueueView({ cases, status }: { cases: OverdueCase[]; stat
               const Icon = config.Icon;
               return (
                 <li key={step.tierIndex} className="flex items-center gap-1.5">
-                  <span className="flex items-center gap-1.5 rounded px-2 py-1" style={{ background: "var(--color-bg)" }}>
+                  <span className="flex items-center gap-1.5 rounded px-2 py-1" style={{ background: "var(--color-surface-2)" }}>
                     <Icon size={14} aria-hidden="true" style={{ color: config.colorVar, flexShrink: 0 }} />
                     <span className="font-medium" style={{ color: "var(--color-ink)" }}>
                       {step.label}

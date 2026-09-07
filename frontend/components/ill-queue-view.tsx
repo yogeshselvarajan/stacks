@@ -100,7 +100,7 @@ export function IllQueueView({ requests, status }: { requests: IllRequest[]; sta
                 </tr>
                 {isExpanded && r.specialistTrace && (
                   <tr id={detailId}>
-                    <td colSpan={2} className="px-4 py-3" style={{ background: "var(--color-bg)" }}>
+                    <td colSpan={2} className="px-4 py-3" style={{ background: "var(--color-surface-2)" }}>
                       {/* frontend_architecture.md section 7.5: the specialist's own
                           reasoning trace is a distinctly labeled block, never folded
                           silently into a top-level rationale. */}

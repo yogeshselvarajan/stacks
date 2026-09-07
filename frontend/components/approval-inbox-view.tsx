@@ -11,7 +11,7 @@ type ResolveAction = "approve" | "decline";
 const TIER_ORDER: Record<string, number> = { RED: 0, YELLOW: 1, GREEN: 2 };
 
 const APPROVE_BUTTON_CLASS =
-  "stacks-focus-ring rounded px-3 py-1.5 text-sm font-medium text-white transition-all hover:brightness-90 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60";
+  "stacks-focus-ring rounded px-3 py-1.5 text-sm font-medium transition-all hover:brightness-90 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60";
 const DECLINE_BUTTON_CLASS =
   "stacks-focus-ring rounded border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--color-bg)] active:bg-[var(--color-border)] disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -117,6 +117,7 @@ export function ApprovalInboxView({
                 className={APPROVE_BUTTON_CLASS}
                 style={{
                   background: "var(--color-tier-green-fill)",
+                  color: "var(--color-fill-text)",
                   transitionDuration: "var(--motion-duration-feedback)",
                   transitionTimingFunction: "var(--motion-ease-feedback)",
                 }}

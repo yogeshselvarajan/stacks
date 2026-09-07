@@ -36,8 +36,8 @@ export function AuditTrailView({
         <ol className="space-y-3 border-l-2 pl-4" style={{ borderColor: "var(--color-border)" }}>
           {Array.from({ length: 3 }).map((_, i) => (
             <li key={i}>
-              <div data-testid="skeleton-line" className="mb-1 h-3 w-24 animate-pulse rounded" style={{ background: "var(--color-border)" }} />
-              <div data-testid="skeleton-line" className="h-4 w-2/3 animate-pulse rounded" style={{ background: "var(--color-border)" }} />
+              <div data-testid="skeleton-line" className="mb-1 h-3 w-24 animate-pulse rounded" style={{ background: "var(--color-surface-2)" }} />
+              <div data-testid="skeleton-line" className="h-4 w-2/3 animate-pulse rounded" style={{ background: "var(--color-surface-2)" }} />
             </li>
           ))}
         </ol>
