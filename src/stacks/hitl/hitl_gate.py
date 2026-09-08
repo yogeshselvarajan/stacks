@@ -182,7 +182,13 @@ class HitlGateHook(HookProvider):
                 token_related_action_id = approval_token.get("related_action_id") if approval_token else None
                 if is_approval_valid(tier, approver_role, workflow) and token_related_action_id == related_action_id:
                     return
-        except Exception as exc:
+        except Exception:
+            # Fails closed (blocks the commit) on purpose -- but a silent
+            # except left the live 502 investigation with no way to see
+            # WHY the gate blocked a call, forcing a guess-and-redeploy
+            # cycle. Log the real traceback so this is diagnosable from
+            # CloudWatch without another round trip.
+            logger.exception("hitl_gate_error tool=%s", tool_name)
             event.cancel_tool = "blocked_gate_error"
             return
 
