@@ -19,6 +19,7 @@ from stacks.hooks.audit_log import AuditLogSink
 from stacks.identity.claims import StaffIdentityClaims
 
 from bff.deps import get_audit_sink, get_current_claims, get_pending_approvals_sink, get_repo
+from bff.display_names import item_title, patron_name, room_name
 
 router = APIRouter()
 
@@ -50,7 +51,7 @@ def _summary_for_pending(record, repo: LibraryDataRepository) -> tuple[str, list
     if record.workflow == "room_booking":
         booking_ids = record.case_id.split(":")
         bookings = [repo.get_booking(record.library_id, bid) for bid in booking_ids]
-        candidates = [{"id": b.booking_id, "label": f"{b.booking_type.value} in {b.room_id}"} for b in bookings if b is not None]
+        candidates = [{"id": b.booking_id, "label": f"{b.booking_type.value} in {room_name(b.room_id)}"} for b in bookings if b is not None]
         return (f"Room-booking conflict: {' vs. '.join(c['label'] for c in candidates)}.", candidates or None)
     if record.workflow == "ill_routing":
         request = repo.get_ill_request(record.library_id, record.case_id)
@@ -115,7 +116,8 @@ async def get_calendar(
         bookings.extend(room_bookings)
     return [
         {
-            "bookingId": b.booking_id, "roomId": b.room_id, "start": b.start.isoformat(), "end": b.end.isoformat(),
+            "bookingId": b.booking_id, "roomId": b.room_id, "roomName": room_name(b.room_id),
+            "start": b.start.isoformat(), "end": b.end.isoformat(),
             "bookingType": b.booking_type.value, "status": b.status.value, "conflictResolution": None,
         }
         for b in bookings
@@ -196,6 +198,8 @@ async def get_overdue_queue(
         cases.append({
             "circulationRecordId": record.circulation_record_id,
             "patronId": record.patron_id,
+            "patronName": patron_name(record.patron_id),
+            "itemTitle": item_title(record.item_id),
             "tierHistory": _tier_history_for_record(record, pending_case_ids),
             # recallSummary needs a real AgentCore Memory lookup, not
             # wired into this read endpoint -- named scope decision,

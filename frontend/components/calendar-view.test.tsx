@@ -17,6 +17,12 @@ describe("CalendarView", () => {
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
+  it("populated state: shows the room's human-readable name, not just its raw id", () => {
+    render(<CalendarView bookings={CALENDAR_FIXTURE} status="ready" />);
+    expect(screen.getByText("Story Room")).toBeInTheDocument();
+    expect(screen.getByText("room_a")).toBeInTheDocument();
+  });
+
   it("empty state: names the room/date filter as why nothing shows", () => {
     render(<CalendarView bookings={[]} status="ready" />);
     expect(screen.getByText(/no bookings for this room and date range/i)).toBeInTheDocument();
@@ -45,7 +51,7 @@ describe("CalendarView", () => {
   it("pending conflict: falls back to a disabled badge (not a link) when no case id is available", () => {
     const bookings: CalendarBooking[] = [
       {
-        bookingId: "b_orphan", roomId: "room_z", start: "2026-09-05T10:00:00Z", end: "2026-09-05T11:00:00Z",
+        bookingId: "b_orphan", roomId: "room_z", roomName: "room_z", start: "2026-09-05T10:00:00Z", end: "2026-09-05T11:00:00Z",
         bookingType: "one_off", status: "pending_conflict",
       },
     ];

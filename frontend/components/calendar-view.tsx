@@ -97,7 +97,10 @@ export function CalendarView({ bookings, status }: { bookings: CalendarBooking[]
                   : undefined,
             }}
           >
-            <td className="px-4 py-2" style={{ fontFamily: "var(--font-mono)" }}>{b.roomId}</td>
+            <td className="px-4 py-2">
+              <div>{b.roomName}</div>
+              <div className="text-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--color-ink-muted)" }}>{b.roomId}</div>
+            </td>
             <td className="px-4 py-2" style={{ fontVariantNumeric: "tabular-nums" }}>{b.start}</td>
             <td className="px-4 py-2" style={{ fontVariantNumeric: "tabular-nums" }}>{b.end}</td>
             <td className="px-4 py-2">

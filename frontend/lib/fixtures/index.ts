@@ -22,12 +22,12 @@ export const EMPTY_APPROVAL_CASES_FIXTURE: ApprovalCase[] = [];
 
 export const CALENDAR_FIXTURE: CalendarBooking[] = [
   {
-    bookingId: "b_recurring_a", roomId: "room_a", start: "2026-09-01T14:00:00Z", end: "2026-09-01T16:00:00Z",
+    bookingId: "b_recurring_a", roomId: "room_a", roomName: "Story Room", start: "2026-09-01T14:00:00Z", end: "2026-09-01T16:00:00Z",
     bookingType: "recurring_program", status: "confirmed",
     conflictResolution: { resolvedTier: "GREEN", policyClauseId: "RBP-1", yieldingBookingId: "b_oneoff_a" },
   },
   {
-    bookingId: "b_walkin_c", roomId: "room_b", start: "2026-09-03T10:00:00Z", end: "2026-09-03T11:00:00Z",
+    bookingId: "b_walkin_c", roomId: "room_b", roomName: "Community Room B", start: "2026-09-03T10:00:00Z", end: "2026-09-03T11:00:00Z",
     bookingType: "one_off", status: "pending_conflict",
     pendingReview: { caseId: "b_recurring_c:b_walkin_c", tier: "YELLOW" },
   },
@@ -43,7 +43,7 @@ export const ILL_QUEUE_FIXTURE: IllRequest[] = [
 
 export const OVERDUE_QUEUE_FIXTURE: OverdueCase[] = [
   {
-    circulationRecordId: "circ_1", patronId: "patron_1",
+    circulationRecordId: "circ_1", patronId: "patron_1", patronName: "Maria Chen", itemTitle: "The Great Gatsby",
     tierHistory: [
       { tierIndex: 0, label: "Informational", status: "sent" },
       { tierIndex: 1, label: "Fee mention", status: "held_for_review" },

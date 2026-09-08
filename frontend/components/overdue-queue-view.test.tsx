@@ -17,6 +17,13 @@ describe("OverdueQueueView", () => {
     expect(screen.getByText(/held for review/i)).toBeInTheDocument();
   });
 
+  it("populated state: shows the item title and patron name, not just the raw circulation record id", () => {
+    render(<OverdueQueueView cases={OVERDUE_QUEUE_FIXTURE} status="ready" />);
+    expect(screen.getByText(/The Great Gatsby/)).toBeInTheDocument();
+    expect(screen.getByText(/Maria Chen/)).toBeInTheDocument();
+    expect(screen.getByText("circ_1")).toBeInTheDocument();
+  });
+
   it("shows the Memory recall indicator distinctly from the step-tracker", () => {
     render(<OverdueQueueView cases={OVERDUE_QUEUE_FIXTURE} status="ready" />);
     expect(screen.getByText(/hardship flag on file/i)).toBeInTheDocument();

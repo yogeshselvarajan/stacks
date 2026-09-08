@@ -51,6 +51,9 @@ export function OverdueQueueView({ cases, status }: { cases: OverdueCase[]; stat
     <ul className="space-y-3">
       {cases.map((c) => (
         <li key={c.circulationRecordId} className="rounded-lg border p-4" style={{ borderColor: "var(--color-border)" }}>
+          <p className="font-medium" style={{ color: "var(--color-ink)" }}>
+            {c.itemTitle} &middot; {c.patronName}
+          </p>
           <p className="mb-3 font-mono text-xs" style={{ color: "var(--color-ink-muted)" }}>
             {c.circulationRecordId}
           </p>

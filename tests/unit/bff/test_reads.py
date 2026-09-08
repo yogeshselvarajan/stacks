@@ -73,7 +73,11 @@ def test_get_approvals_never_returns_a_case_for_a_different_library(wired_client
 def test_get_calendar_returns_bookings_for_the_callers_library(wired_client):
     response = wired_client.get("/api/calendar?room_id=room_a")
     assert response.status_code == 200
-    assert len(response.json()) >= 1
+    body = response.json()
+    assert len(body) >= 1
+    # roomName is a human-readable label alongside the raw roomId -- the
+    # UI shows this instead of the bare "room_a" internal id.
+    assert body[0]["roomName"] == "Story Room"
 
 
 def test_get_audit_list_returns_entries_for_the_callers_library(wired_client):
@@ -89,7 +93,7 @@ def test_get_ill_queue_returns_the_seeded_requests_for_the_callers_library(wired
     assert response.status_code == 200
     body = response.json()
     ids = {r["illRequestId"] for r in body}
-    assert ids == {"ill_unambiguous", "ill_ambiguous"}
+    assert ids == {"ill_unambiguous", "ill_ambiguous", "ill_open_1", "ill_open_2", "ill_open_3"}
     for r in body:
         assert r["tier"] is None  # no pending ill_routing approval seeded in this fixture
 
@@ -121,12 +125,17 @@ def test_get_overdue_queue_returns_the_seeded_overdue_records(wired_client):
     response = wired_client.get("/api/overdue-queue")
     assert response.status_code == 200
     body = {c["circulationRecordId"]: c for c in response.json()}
-    assert set(body.keys()) == {"circ_green", "circ_red"}
+    assert set(body.keys()) == {"circ_green", "circ_red", "circ_003", "circ_004"}
     # circ_green has prior_reminder_tier_sent=-1: nothing sent yet, first
     # tier is pending (no PendingApprovals case seeded for it).
     assert body["circ_green"]["tierHistory"] == [{"tierIndex": 0, "label": "Informational", "status": "pending"}]
     # circ_red has prior_reminder_tier_sent=3: every ladder tier already sent.
     assert [step["status"] for step in body["circ_red"]["tierHistory"]] == ["sent", "sent", "sent", "sent"]
+    # Every case surfaces a human-readable patron name and item title, not
+    # just the raw internal ids -- the whole point of this fixture/BFF
+    # enrichment.
+    assert body["circ_green"]["patronName"] == "Maria Chen"
+    assert body["circ_green"]["itemTitle"] == "The Great Gatsby"
 
 
 def test_get_overdue_queue_marks_a_tier_with_a_pending_case_as_held_for_review(wired_client):

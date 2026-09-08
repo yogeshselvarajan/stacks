@@ -80,6 +80,36 @@ def seed_demo_library(repo: InMemoryLibraryDataRepository, library_id: str = "li
         CatalogCandidate(holding_id="hold_2b", edition="Oxford World's Classics", location="lib_partner_b", availability="available"),
     ])
 
+    # -- ILL: additional unambiguous/mixed-availability cases, so the ILL
+    # Queue has enough rows to read as a real, working queue rather than a
+    # two-row sample.
+    repo.save_ill_request(ILLRequestRecord(
+        ill_request_id="ill_open_1", library_id=library_id,
+        requested_title="The Hobbit",
+        requester_patron_id="patron_ill_3",
+    ))
+    repo.set_catalog_candidates(library_id, "The Hobbit", [
+        CatalogCandidate(holding_id="hold_3a", edition="Illustrated", location="lib_partner_a", availability="available"),
+    ])
+
+    repo.save_ill_request(ILLRequestRecord(
+        ill_request_id="ill_open_2", library_id=library_id,
+        requested_title="Pride and Prejudice",
+        requester_patron_id="patron_ill_4",
+    ))
+    repo.set_catalog_candidates(library_id, "Pride and Prejudice", [
+        CatalogCandidate(holding_id="hold_4a", edition="Norton Critical Edition", location="lib_partner_b", availability="available"),
+    ])
+
+    repo.save_ill_request(ILLRequestRecord(
+        ill_request_id="ill_open_3", library_id=library_id,
+        requested_title="Beloved",
+        requester_patron_id="patron_ill_5",
+    ))
+    repo.set_catalog_candidates(library_id, "Beloved", [
+        CatalogCandidate(holding_id="hold_5a", edition="1st", location="lib_partner_a", availability="available"),
+    ])
+
     repo.set_policy_clauses(library_id, "ill_routing", [
         PolicyClauseRef(
             policy_name="ill_routing", clause_id="ILL-1",
@@ -100,6 +130,23 @@ def seed_demo_library(repo: InMemoryLibraryDataRepository, library_id: str = "li
         patron_id="patron_overdue_2", item_id="item_2", item_type="book",
         due_date=datetime(2026, 7, 1, tzinfo=timezone.utc),
         prior_reminder_tier_sent=3,
+    ))
+
+    # -- Overdue: two more cases so the Overdue Queue reads as a real,
+    # in-progress queue rather than a two-row sample -- one mid-ladder, one
+    # newly overdue with a sensitivity flag (mirrors the room-booking RED
+    # case's own minor's-account pattern for overdue chasing).
+    repo.save_circulation_record(CirculationRecord(
+        circulation_record_id="circ_003", library_id=library_id,
+        patron_id="patron_overdue_3", item_id="item_3", item_type="book",
+        due_date=datetime(2026, 8, 10, tzinfo=timezone.utc),
+        prior_reminder_tier_sent=0,
+    ))
+    repo.save_circulation_record(CirculationRecord(
+        circulation_record_id="circ_004", library_id=library_id,
+        patron_id="patron_overdue_4", item_id="item_4", item_type="book",
+        due_date=datetime(2026, 8, 25, tzinfo=timezone.utc),
+        prior_reminder_tier_sent=1, flags=[SensitivityFlag.MINOR_ACCOUNT],
     ))
 
     repo.set_policy_clauses(library_id, "overdue_escalation", [

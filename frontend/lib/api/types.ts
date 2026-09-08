@@ -16,6 +16,7 @@ export interface ApprovalCase {
 export interface CalendarBooking {
   bookingId: string;
   roomId: string;
+  roomName: string;
   start: string;
   end: string;
   bookingType: string;
@@ -36,6 +37,8 @@ export interface IllRequest {
 export interface OverdueCase {
   circulationRecordId: string;
   patronId: string;
+  patronName: string;
+  itemTitle: string;
   tierHistory: { tierIndex: number; label: string; status: "sent" | "pending" | "held_for_review" }[];
   recallSummary?: string;
 }
