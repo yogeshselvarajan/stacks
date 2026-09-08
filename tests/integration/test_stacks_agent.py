@@ -350,6 +350,8 @@ def test_resume_across_separate_agent_instances_completes_the_commit(monkeypatch
             "library_id": "lib_demo",
             "conflicting_booking_ids": ["b_recurring_b", "b_walkin_b"],
             "action": "commit",
+            "chosen_resolution_booking_id": "b_walkin_b",
+            "rationale": "per RBP-1",
         },
     }
     _, interrupts = agent_1.hooks.invoke_callbacks(
@@ -392,3 +394,13 @@ def test_resume_across_separate_agent_instances_completes_the_commit(monkeypatch
     assert resumed_interrupts == []
     assert resumed_event.cancel_tool is False
     assert resumed_tool_use["input"]["approval_token"]["approver_role"] == "librarian_case_review"
+
+    # The gate resuming successfully is necessary but not sufficient --
+    # resolve_room_conflict's own commit path independently caches its
+    # evaluation in the SAME process-local EvaluationCache, which is also
+    # empty on this fresh Agent. Actually invoke the tool with the gate's
+    # resumed tool_input (matching what the real event loop does next)
+    # and confirm the commit itself completes, not just that the gate
+    # stopped blocking it.
+    commit_result = resolve_tool_2(**resumed_tool_use["input"])
+    assert commit_result["content"][0]["json"]["status"] == "committed"

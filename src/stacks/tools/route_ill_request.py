@@ -85,7 +85,7 @@ def make_route_ill_request(
         if request.status != ILLRequestStatus.OPEN:
             return {"status": "error", "content": [{"text": "already_routed"}]}
 
-        if action == "evaluate":
+        def _compute_evaluation() -> dict[str, Any]:
             candidates = repo.search_catalog_candidates(library_id, request.requested_title, request.requested_edition_hint)
             if any(f in (SensitivityFlag.RARE_OR_SPECIAL_COLLECTIONS, SensitivityFlag.POLICY_EXCEPTION_REQUIRED) for f in request.flags):
                 ambiguity = "policy_exception"
@@ -107,7 +107,7 @@ def make_route_ill_request(
             except Exception:
                 requester_pattern_json = None  # fail-open: treated identically to a first-time requester
 
-            evaluation = {
+            return {
                 "ill_request_id": ill_request_id,
                 "candidate_matches": [c.model_dump(mode="json") for c in candidates],
                 "ambiguity": ambiguity,
@@ -116,13 +116,26 @@ def make_route_ill_request(
                 "requester_pattern": requester_pattern_json,
                 "requester_patron_id": request.requester_patron_id,
             }
+
+        if action == "evaluate":
+            evaluation = _compute_evaluation()
             cache.put(library_id, ill_request_id, evaluation)
             return {"status": "success", "content": [{"json": evaluation}]}
 
         if action == "commit":
             evaluation = cache.get(library_id, ill_request_id)
             if evaluation is None:
-                return {"status": "error", "content": [{"text": "evaluate_not_called"}]}
+                # See resolve_room_conflict.py's identical comment: only a
+                # resume (or an already-valid prior token) ever carries
+                # approval_token, since HitlGateHook always sets one on a
+                # successful resume before the tool ever runs. A commit
+                # with no approval_token and no cached evaluate is still
+                # exactly the case this check exists to catch: the model
+                # skipped evaluate entirely in a single, same-process
+                # turn.
+                if approval_token is None:
+                    return {"status": "error", "content": [{"text": "evaluate_not_called"}]}
+                evaluation = _compute_evaluation()
 
             # "Resolved via substitution" is definitionally a claim about
             # having converged on a specific holding -- a commit with no

@@ -68,27 +68,54 @@ def make_resolve_room_conflict(
         if not _bookings_overlap(bookings):
             return {"status": "error", "content": [{"text": "no_conflict_detected: named bookings do not overlap"}]}
 
-        if action == "evaluate":
+        def _compute_evaluation() -> dict[str, Any] | None:
             clauses = repo.get_policy_clauses(library_id, "room_booking_priority")
             if not clauses:
-                return {"status": "error", "content": [{"text": "policy_not_found"}]}
+                return None
             clause = clauses[0]
             candidates = _rank_resolutions(bookings, clause.clause_id)
             sensitivity_flags = sorted({f for b in bookings for f in b.flags}, key=lambda f: f.value)
-            evaluation = {
+            return {
                 "conflict_id": conflict_id,
                 "applicable_policy_clause": clause.model_dump(mode="json"),
                 "candidate_resolutions": candidates,
                 "sensitivity_flags": [f.value for f in sensitivity_flags],
                 "tie": len(candidates) >= 2,
             }
+
+        if action == "evaluate":
+            evaluation = _compute_evaluation()
+            if evaluation is None:
+                return {"status": "error", "content": [{"text": "policy_not_found"}]}
             cache.put(library_id, conflict_id, evaluation)
             return {"status": "success", "content": [{"json": evaluation}]}
 
         if action == "commit":
             evaluation = cache.get(library_id, conflict_id)
             if evaluation is None:
-                return {"status": "error", "content": [{"text": "evaluate_not_called: commit requires a preceding evaluate for this conflict_id"}]}
+                # No cached evaluate in THIS process. A resumed HITL
+                # approval is a SEPARATE AgentCore Runtime invocation (a
+                # fresh process) from the one that raised the interrupt and
+                # ran evaluate, so this cache is legitimately empty on
+                # every resume -- but ONLY a resume (or an already-valid
+                # prior token) ever carries approval_token, since
+                # HitlGateHook always sets one on a successful resume
+                # before the tool ever runs. A commit with no
+                # approval_token and no cached evaluate is still exactly
+                # the case this check exists to catch: the model skipped
+                # evaluate entirely in a single, same-process turn. Only
+                # recompute (a pure function of the current policy clauses
+                # and the named bookings, so exactly equivalent to what a
+                # fresh evaluate call would return right now) when a token
+                # is present -- the interrupt could only have been raised
+                # in the first place if the ORIGINAL evaluate (in the
+                # prior process) already succeeded and HitlGateHook already
+                # classified this exact case's tier from it.
+                if approval_token is None:
+                    return {"status": "error", "content": [{"text": "evaluate_not_called: commit requires a preceding evaluate for this conflict_id"}]}
+                evaluation = _compute_evaluation()
+                if evaluation is None:
+                    return {"status": "error", "content": [{"text": "policy_not_found"}]}
 
             valid_ids = {c["booking_id_that_yields"] for c in evaluation["candidate_resolutions"]}
             if chosen_resolution_booking_id not in valid_ids:

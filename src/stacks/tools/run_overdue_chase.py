@@ -80,7 +80,7 @@ def make_run_overdue_chase(
         next_tier_index = min(record.prior_reminder_tier_sent + 1, len(_ESCALATION_LADDER) - 1)
         tier_consequence = _ESCALATION_LADDER[next_tier_index]
 
-        if action == "evaluate":
+        def _compute_evaluation() -> dict[str, Any]:
             clauses = repo.get_policy_clauses(library_id, "overdue_escalation")
             clause = clauses[0].model_dump(mode="json") if clauses else None
 
@@ -90,7 +90,7 @@ def make_run_overdue_chase(
             except Exception:
                 has_recalled_hardship_history = True  # fail-closed: treated as equivalent to a live flag
 
-            evaluation = {
+            return {
                 "circulation_record_id": circulation_record_id,
                 "days_overdue": days_overdue,
                 "prior_reminder_tier_sent": record.prior_reminder_tier_sent,
@@ -101,13 +101,33 @@ def make_run_overdue_chase(
                 "has_recalled_hardship_history": has_recalled_hardship_history,
                 "patron_id": record.patron_id,
             }
+
+        if action == "evaluate":
+            evaluation = _compute_evaluation()
             cache.put(library_id, circulation_record_id, evaluation)
             return {"status": "success", "content": [{"json": evaluation}]}
 
         if action == "commit":
             evaluation = cache.get(library_id, circulation_record_id)
             if evaluation is None:
-                return {"status": "error", "content": [{"text": "evaluate_not_called"}]}
+                # See resolve_room_conflict.py's identical comment: only a
+                # resume (or an already-valid prior token) ever carries
+                # approval_token, since HitlGateHook always sets one on a
+                # successful resume before the tool ever runs. A commit
+                # with no approval_token and no cached evaluate is still
+                # exactly the case this check exists to catch: the model
+                # skipped evaluate entirely in a single, same-process
+                # turn. When a token is present, recomputing is exactly
+                # equivalent to what a fresh evaluate call would return
+                # right now -- the only values it depends on
+                # (record.prior_reminder_tier_sent, the current policy
+                # clause, current hardship history) are unchanged between
+                # the two processes for a genuine resume, since nothing
+                # writes prior_reminder_tier_sent until commit itself
+                # runs, below.
+                if approval_token is None:
+                    return {"status": "error", "content": [{"text": "evaluate_not_called"}]}
+                evaluation = _compute_evaluation()
 
             sensitivity_flags = [SensitivityFlag(f) for f in evaluation["sensitivity_flags"]]
             tier = classify_overdue_chase(evaluation["tier_consequence"], sensitivity_flags, evaluation["has_recalled_hardship_history"])
