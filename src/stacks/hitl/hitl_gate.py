@@ -114,47 +114,81 @@ class HitlGateHook(HookProvider):
             library_id = tool_input.get("library_id")
             case_id = _case_id_for(workflow, tool_input)
             related_action_id = _related_action_id_for(workflow, case_id)
-            evaluation = self._caches[workflow].get(library_id, case_id)
-            if evaluation is None:
-                # No preceding evaluate cached -- the gate cannot determine
-                # safety and must not guess. Block the call.
-                event.cancel_tool = "blocked_missing_evaluation"
-                return
+            interrupt_name = f"hitl:{tool_name}:{case_id}"
 
-            tier = _classify_from_evaluation(workflow, evaluation, tool_input, self._ill_disambiguation_cache)
-            # A genuinely tied ROOM_BOOKING case requires an approval token
-            # from the tool itself regardless of tier (resolve_room_conflict's
-            # own fix) -- so a tied GREEN case must still fall through to the
-            # interrupt block below, or no human is ever asked and the case
-            # becomes an unresolvable dead end. A non-tied GREEN case still
-            # returns early as before. Whole-branch review Important 5.
-            # is_approval_valid(Tier.GREEN, ...) is unconditionally True for
-            # any role (Plan 1's already-accepted tie-break design: GREEN
-            # requires *an* approver to pick a side, not a privileged one).
-            # This means a tied GREEN case's interrupt resume below -- edit
-            # passthrough included -- can be satisfied by any authenticated
-            # staff role, not just librarian_case_review. That is an
-            # intentional, inherited property of Plan 1's tie-break fix,
-            # not a gap Task 3 introduced; pinned explicitly by
-            # test_green_tied_room_conflict_edit_resume_succeeds_with_any_role
-            # in tests/unit/test_hitl_gate.py so a future refactor cannot
-            # silently change it in either direction without a failing test.
-            is_unresolvable_tie = workflow is Workflow.ROOM_BOOKING and evaluation.get("tie")
-            if tier is Tier.GREEN and not is_unresolvable_tie:
-                return
+            # A resumed pass reconstructs the Agent from scratch -- a real
+            # AgentCore Runtime invocation is a brand-new process every
+            # time, and the BFF's write endpoint drives the resume as a
+            # SEPARATE invocation from the one that raised the interrupt.
+            # agent._interrupt_state is correctly restored from the
+            # session at that point (activated=True, the Interrupt object
+            # with its human response attached), but self._caches[workflow]
+            # is a fresh, empty, in-process EvaluationCache -- it is never
+            # part of what gets persisted to the session. Looking it up
+            # here would always miss on a resume, set
+            # cancel_tool="blocked_missing_evaluation", and silently
+            # discard the human's decision (confirmed via direct
+            # reproduction: the agent falls back to the model, which
+            # re-evaluates and re-attempts the commit as a brand new tool
+            # call with a brand new toolUseId, raising a brand new
+            # interrupt instead of ever completing this one). Detect that
+            # case and recover tier from the interrupt's own persisted
+            # reason (set below, the first time this interrupt is raised)
+            # instead of re-deriving it from a cache that cannot possibly
+            # be warm here.
+            resuming_interrupt = next(
+                (
+                    existing
+                    for existing in event.agent._interrupt_state.interrupts.values()
+                    if existing.name == interrupt_name and existing.response is not None
+                ),
+                None,
+            )
 
-            approval_token = tool_input.get("approval_token")
-            approver_role = approval_token.get("approver_role") if approval_token else None
-            token_related_action_id = approval_token.get("related_action_id") if approval_token else None
-            if is_approval_valid(tier, approver_role, workflow) and token_related_action_id == related_action_id:
-                return
+            if resuming_interrupt is not None:
+                tier = Tier(resuming_interrupt.reason["tier"])
+            else:
+                evaluation = self._caches[workflow].get(library_id, case_id)
+                if evaluation is None:
+                    # No preceding evaluate cached -- the gate cannot determine
+                    # safety and must not guess. Block the call.
+                    event.cancel_tool = "blocked_missing_evaluation"
+                    return
+
+                tier = _classify_from_evaluation(workflow, evaluation, tool_input, self._ill_disambiguation_cache)
+                # A genuinely tied ROOM_BOOKING case requires an approval token
+                # from the tool itself regardless of tier (resolve_room_conflict's
+                # own fix) -- so a tied GREEN case must still fall through to the
+                # interrupt block below, or no human is ever asked and the case
+                # becomes an unresolvable dead end. A non-tied GREEN case still
+                # returns early as before. Whole-branch review Important 5.
+                # is_approval_valid(Tier.GREEN, ...) is unconditionally True for
+                # any role (Plan 1's already-accepted tie-break design: GREEN
+                # requires *an* approver to pick a side, not a privileged one).
+                # This means a tied GREEN case's interrupt resume below -- edit
+                # passthrough included -- can be satisfied by any authenticated
+                # staff role, not just librarian_case_review. That is an
+                # intentional, inherited property of Plan 1's tie-break fix,
+                # not a gap Task 3 introduced; pinned explicitly by
+                # test_green_tied_room_conflict_edit_resume_succeeds_with_any_role
+                # in tests/unit/test_hitl_gate.py so a future refactor cannot
+                # silently change it in either direction without a failing test.
+                is_unresolvable_tie = workflow is Workflow.ROOM_BOOKING and evaluation.get("tie")
+                if tier is Tier.GREEN and not is_unresolvable_tie:
+                    return
+
+                approval_token = tool_input.get("approval_token")
+                approver_role = approval_token.get("approver_role") if approval_token else None
+                token_related_action_id = approval_token.get("related_action_id") if approval_token else None
+                if is_approval_valid(tier, approver_role, workflow) and token_related_action_id == related_action_id:
+                    return
         except Exception as exc:
             event.cancel_tool = "blocked_gate_error"
             return
 
         try:
             response = event.interrupt(
-                f"hitl:{tool_name}:{case_id}",
+                interrupt_name,
                 reason={"tier": tier.value, "tool": tool_name, "workflow": workflow.value, "case_id": case_id},
             )
             if not isinstance(response, dict) or not response.get("approved"):

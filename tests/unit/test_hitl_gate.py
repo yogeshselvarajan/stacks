@@ -21,6 +21,29 @@ class _FakeInterrupt:
         self.reason = reason
 
 
+class _FakeInterruptState:
+    """Minimal stand-in for strands.interrupt._InterruptState -- only the
+    ``interrupts`` dict HitlGateHook._gate reads (to detect a resumed pass
+    and recover tier from the persisted reason instead of the per-process
+    EvaluationCache). Left empty by every _FakeEvent, since this fake
+    models the SDK's two-pass mechanism as a single _gate() call (see
+    _FakeEvent below) and never exercises the real cross-invocation
+    session-restore path -- that gets its one true exercise in
+    tests/integration/test_stacks_agent.py's
+    test_resume_across_separate_agent_instances_completes_the_commit."""
+
+    def __init__(self):
+        self.interrupts: dict[str, object] = {}
+
+
+class _FakeAgent:
+    """Minimal stand-in for strands.Agent -- only the attribute
+    HitlGateHook._gate reads off event.agent."""
+
+    def __init__(self):
+        self._interrupt_state = _FakeInterruptState()
+
+
 class _FakeEvent:
     """Minimal duck-typed stand-in for BeforeToolCallEvent -- exercises
     HitlGateHook._gate directly without needing a live Strands Agent/model,
@@ -38,6 +61,7 @@ class _FakeEvent:
         self.cancel_tool = False
         self._interrupt_response = interrupt_response
         self.interrupt_calls: list[tuple[str, object]] = []
+        self.agent = _FakeAgent()
 
     def interrupt(self, name: str, reason=None):
         self.interrupt_calls.append((name, reason))

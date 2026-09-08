@@ -1,7 +1,10 @@
 import os
+import tempfile
 from datetime import datetime, timezone
 
 import pytest
+from strands.hooks import BeforeToolCallEvent
+from strands.session.file_session_manager import FileSessionManager
 
 from stacks.data.fixtures import seed_demo_library
 from stacks.data.memory_repository import InMemoryLibraryDataRepository
@@ -284,3 +287,108 @@ def test_bff_shaped_edit_then_approve_resumes_correctly_via_real_bedrock(monkeyp
     audit_records = bundle.audit_sink.all()
     committed = [r for r in audit_records if r.tool_name == "resolve_room_conflict" and r.outcome == "committed"]
     assert len(committed) == 1
+
+
+def test_resume_across_separate_agent_instances_completes_the_commit(monkeypatch, tmp_path):
+    """Every other resume test in this file (and in test_hitl_gate.py's
+    _FakeEvent) resumes the SAME Agent/HitlGateHook/EvaluationCache
+    instance that raised the interrupt in the first place. That is not
+    how production actually works: a real AgentCore Runtime invocation
+    is a brand-new process every time, and the BFF's write endpoint
+    (bff/routes/approvals.py) resumes via a SEPARATE
+    invoke_agent_runtime call from the one that raised the interrupt --
+    meaning a fresh build_stacks_agent() call, and therefore a fresh,
+    empty, in-process EvaluationCache that was never part of what gets
+    persisted to the session.
+
+    This test reproduces that exact cross-invocation shape for real,
+    using a real Strands Agent, a real S3-shaped SessionManager
+    (FileSessionManager, so it needs zero AWS credentials or cost), and
+    the real HookRegistry/BeforeToolCallEvent/interrupt machinery -- the
+    only thing stubbed out is the model call itself, since driving the
+    hook directly (matching how the real event loop reuses the
+    persisted tool_use_message on a resumed cycle, per
+    strands/event_loop/event_loop.py) needs no model at all. Before the
+    fix to HitlGateHook._gate (recovering tier from the interrupt's own
+    persisted reason instead of re-deriving it from the empty cache),
+    this reproduced a real bug: the second pass silently set
+    event.cancel_tool = "blocked_missing_evaluation" instead of
+    completing the resume, discarding the human's approval.
+    """
+    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS") and not os.environ.get("STACKS_BEDROCK_MODEL_ID"):
+        monkeypatch.setenv("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+
+    session_id = "sess_cross_invocation_resume"
+    storage_dir = str(tmp_path)
+
+    def make_bundle():
+        repo = InMemoryLibraryDataRepository()
+        seed_demo_library(repo, library_id="lib_demo")
+        claims = StaffIdentityClaims(
+            role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review"
+        )
+        session_manager = FileSessionManager(session_id=session_id, storage_dir=storage_dir)
+        return build_stacks_agent(repo, claims, session_id=session_id, session_manager=session_manager), session_manager
+
+    # Invocation 1: raise the interrupt (matches the AgentCore Runtime call
+    # the BFF's normal chat endpoint makes).
+    bundle_1, session_manager_1 = make_bundle()
+    agent_1 = bundle_1.agent
+    resolve_tool = agent_1.tool_registry.registry["resolve_room_conflict"]
+
+    eval_result = resolve_tool(
+        library_id="lib_demo",
+        conflicting_booking_ids=["b_recurring_b", "b_walkin_b"],
+        action="evaluate",
+    )
+    assert eval_result["status"] == "success"
+
+    tool_use = {
+        "toolUseId": "tooluse_cross_invocation_1",
+        "name": "resolve_room_conflict",
+        "input": {
+            "library_id": "lib_demo",
+            "conflicting_booking_ids": ["b_recurring_b", "b_walkin_b"],
+            "action": "commit",
+        },
+    }
+    _, interrupts = agent_1.hooks.invoke_callbacks(
+        BeforeToolCallEvent(agent=agent_1, selected_tool=resolve_tool, tool_use=tool_use, invocation_state={})
+    )
+    assert len(interrupts) == 1
+    interrupt = interrupts[0]
+
+    # Mirrors strands/event_loop/event_loop.py:527-530 (activate the
+    # interrupt state after collecting interrupts) and the
+    # AfterInvocationEvent -> sync_agent persistence step the real event
+    # loop drives automatically.
+    agent_1._interrupt_state.context = {
+        "tool_use_message": {"role": "assistant", "content": [{"toolUse": tool_use}]},
+        "tool_results": [],
+    }
+    agent_1._interrupt_state.activate()
+    session_manager_1.sync_agent(agent_1)
+
+    # Invocation 2: a SEPARATE process/Agent resumes the interrupt (matches
+    # the BFF's write endpoint's own invoke_agent_runtime call).
+    bundle_2, _session_manager_2 = make_bundle()
+    agent_2 = bundle_2.agent
+    assert agent_2._interrupt_state.activated is True
+
+    prompt = [{"interruptResponse": {"interruptId": interrupt.id, "response": {
+        "approved": True, "approver_role": "librarian_case_review",
+        "token": "hitl_resume:cross_invocation", "edited_value": "b_walkin_b",
+    }}}]
+    agent_2._interrupt_state.resume(prompt)
+
+    resumed_tool_use = agent_2._interrupt_state.context["tool_use_message"]["content"][0]["toolUse"]
+    resolve_tool_2 = agent_2.tool_registry.registry["resolve_room_conflict"]
+    resumed_event, resumed_interrupts = agent_2.hooks.invoke_callbacks(
+        BeforeToolCallEvent(
+            agent=agent_2, selected_tool=resolve_tool_2, tool_use=resumed_tool_use, invocation_state={}
+        )
+    )
+
+    assert resumed_interrupts == []
+    assert resumed_event.cancel_tool is False
+    assert resumed_tool_use["input"]["approval_token"]["approver_role"] == "librarian_case_review"
