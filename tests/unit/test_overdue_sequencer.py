@@ -52,6 +52,11 @@ def _fake_session_manager_factory():
 def test_run_nightly_tier_invokes_the_agent_and_records_tier_history():
     session_manager_cls, sessions = _fake_session_manager_factory()
     agent = MagicMock()
+    # Real strands.Agent construction with a session_manager restores
+    # _interrupt_state.activated from the session automatically; these
+    # tests exercise a case with no unresolved prior interrupt, so it
+    # starts False, matching a real Agent's own default.
+    agent._interrupt_state.activated = False
     agent.return_value = MagicMock(message="Sent tier 0 reminder for circ_1, cited OD-1.")
 
     sequencer = OverdueSequencer(
@@ -71,6 +76,11 @@ def test_run_nightly_tier_invokes_the_agent_and_records_tier_history():
 def test_run_nightly_tier_reuses_the_same_session_across_two_nights():
     session_manager_cls, sessions = _fake_session_manager_factory()
     agent = MagicMock()
+    # Real strands.Agent construction with a session_manager restores
+    # _interrupt_state.activated from the session automatically; these
+    # tests exercise a case with no unresolved prior interrupt, so it
+    # starts False, matching a real Agent's own default.
+    agent._interrupt_state.activated = False
     agent.return_value = MagicMock(message="ok")
 
     sequencer = OverdueSequencer(
@@ -99,6 +109,11 @@ def test_run_nightly_tier_records_pending_approval_on_interrupt():
 
     fake_interrupt = SimpleNamespace(id="hitl:run_overdue_chase:circ_1")
     agent = MagicMock()
+    # Real strands.Agent construction with a session_manager restores
+    # _interrupt_state.activated from the session automatically; these
+    # tests exercise a case with no unresolved prior interrupt, so it
+    # starts False, matching a real Agent's own default.
+    agent._interrupt_state.activated = False
     agent.return_value = SimpleNamespace(
         message="Escalation for circ_1 is pending human approval.",
         stop_reason="interrupt",
@@ -126,6 +141,11 @@ def test_run_nightly_tier_records_no_pending_approval_on_clean_completion():
     pending-approval case."""
     session_manager_cls, sessions = _fake_session_manager_factory()
     agent = MagicMock()
+    # Real strands.Agent construction with a session_manager restores
+    # _interrupt_state.activated from the session automatically; these
+    # tests exercise a case with no unresolved prior interrupt, so it
+    # starts False, matching a real Agent's own default.
+    agent._interrupt_state.activated = False
     agent.return_value = MagicMock(message="ok")
     del agent.return_value.stop_reason  # ensure getattr falls back to None
     del agent.return_value.interrupts
@@ -145,9 +165,46 @@ def test_run_nightly_tier_records_no_pending_approval_on_clean_completion():
     assert recorded["interrupt_ids"] == []
 
 
+def test_run_nightly_tier_skips_the_agent_when_a_prior_interrupt_is_still_pending():
+    """Real bug, found via live CloudWatch logs: a case that hit a
+    YELLOW/RED interrupt on a prior night and was never approved/declined
+    by a human left agent._interrupt_state.activated=True in the
+    persisted session. The next night's run_nightly_tier reconstructed
+    the session-bound Agent (correctly restoring activated=True) and then
+    called agent(plain_string_prompt) anyway -- Strands requires a list
+    of interruptResponse content while activated, so this raised
+    TypeError every single night (3 consecutive real nights, confirmed in
+    CloudWatch) until a human acted. There is nothing new to do until
+    that happens, so this must skip invoking the agent entirely rather
+    than crash."""
+    session_manager_cls, sessions = _fake_session_manager_factory()
+    agent = MagicMock()
+    agent._interrupt_state.activated = True
+
+    sequencer = OverdueSequencer(
+        bucket="unused-in-this-test", region="us-west-2",
+        agent_factory=lambda session_id: agent,
+        session_manager_factory=session_manager_cls,
+    )
+
+    result = sequencer.run_nightly_tier("circ_1", "lib_demo")
+
+    agent.assert_not_called()
+    assert result["pending_approval"] is True
+    # No new tier_history entry -- nothing happened tonight, so nothing
+    # new gets recorded (and nothing gets written to the session at all,
+    # since there is no existing session yet in this test).
+    assert "overdue:lib_demo:circ_1" not in sessions
+
+
 def test_session_id_is_library_scoped_so_two_libraries_never_collide():
     session_manager_cls, sessions = _fake_session_manager_factory()
     agent = MagicMock()
+    # Real strands.Agent construction with a session_manager restores
+    # _interrupt_state.activated from the session automatically; these
+    # tests exercise a case with no unresolved prior interrupt, so it
+    # starts False, matching a real Agent's own default.
+    agent._interrupt_state.activated = False
     agent.return_value = MagicMock(message="ok")
 
     sequencer = OverdueSequencer(

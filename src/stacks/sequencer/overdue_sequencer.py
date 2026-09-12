@@ -107,6 +107,31 @@ class OverdueSequencer:
         tier_history = list(existing.state.get("tier_history", [])) if existing is not None else []
 
         agent = self._agent_factory(session_id)
+
+        # A prior night's tier already raised a YELLOW/RED interrupt that
+        # no human has resolved yet. Constructing this session-bound Agent
+        # restores agent._interrupt_state.activated=True from the
+        # persisted session (the same real session-restore mechanism a
+        # BFF-resumed chat invocation relies on), and Strands requires the
+        # very next agent(...) call to carry a list of interruptResponse
+        # content while activated -- never a fresh plain-string prompt.
+        # Calling agent(prompt) here with this sequencer's own plain
+        # string prompt raised TypeError every single night until a human
+        # approved/declined the case via the BFF's Approval Inbox (which
+        # resumes the session properly and clears activated) -- confirmed
+        # via real CloudWatch logs showing exactly this crash on 3
+        # consecutive nights once a case's interrupt went unresolved.
+        # There is nothing new for this sequencer to do until a human
+        # acts, so skip invoking the agent entirely rather than crash.
+        if agent._interrupt_state.activated:
+            return {
+                "circulation_record_id": circulation_record_id,
+                "library_id": library_id,
+                "session_id": session_id,
+                "tier_history_length": len(tier_history),
+                "pending_approval": True,
+            }
+
         prompt = (
             f"Run the next overdue-chasing tier for circulation_record_id={circulation_record_id!r}, "
             f"library_id={library_id!r}. Call run_overdue_chase's evaluate action first, then commit "

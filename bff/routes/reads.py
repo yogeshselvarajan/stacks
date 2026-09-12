@@ -108,8 +108,14 @@ async def get_calendar(
     repo: LibraryDataRepository = Depends(get_repo),
 ) -> list[dict]:
     rooms = [room_id] if room_id else _ROOM_BOOKING_ROOMS
-    window_start = datetime.now(timezone.utc) - timedelta(days=7)
-    window_end = datetime.now(timezone.utc) + timedelta(days=30)
+    # The demo dataset's canonical room-booking conflict is seeded at a
+    # fixed 2026-09-01/03 (fixtures.py) -- a narrow rolling window here
+    # silently drops it out of view as real time passes (confirmed live:
+    # a -7/+30 day window already hid it by 2026-09-12). Wide enough to
+    # keep the demo dataset visible for the life of this project without
+    # needing the fixture dates themselves to track wall-clock time.
+    window_start = datetime.now(timezone.utc) - timedelta(days=60)
+    window_end = datetime.now(timezone.utc) + timedelta(days=180)
     bookings = []
     for room in rooms:
         room_bookings = await run_in_threadpool(repo.get_bookings_for_room, claims.library_id, room, window_start, window_end)

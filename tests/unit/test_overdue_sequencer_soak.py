@@ -159,7 +159,16 @@ def _direct_state_advancing_agent_factory(repo, memory, now):
             )
             return SimpleNamespace(message=str(commit_result["content"][0]["json"]))
 
-        return MagicMock(side_effect=run_one_tier)
+        fake_agent = MagicMock(side_effect=run_one_tier)
+        # Real strands.Agent construction with a session_manager restores
+        # _interrupt_state.activated from the persisted session
+        # automatically; this fake drives real tool calls directly rather
+        # than a real Agent, so it never has a genuinely activated
+        # interrupt state to restore -- always False, matching what a
+        # real Agent would report for these clean-completion soak
+        # scenarios (see overdue_sequencer.py's own activated check).
+        fake_agent._interrupt_state.activated = False
+        return fake_agent
 
     return agent_factory
 
