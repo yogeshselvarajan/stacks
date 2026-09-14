@@ -45,7 +45,15 @@ It resolves the cases it can safely resolve, prepares the ones that need a secon
 
 ## The problem
 
-Libraries already have mature automation for predictable work: LibCal blocks an obviously double-booked slot, ILLiad auto-routes the routine borrow, an ILS fires a templated overdue notice on a fixed schedule. What none of that automation does is resolve the conflict that occurs anyway, route the genuinely ambiguous request, or differentiate an overdue response by patron circumstance. That remainder becomes a human review queue, at exactly the point where library staff have the least capacity to absorb it: library staffing declined 3.6% in 2024 alone (11.5% at small libraries), while room reservation demand rose 25% year over year in the same period, and 57% of Library Journal's 2026 *Shifting Sands* survey respondents cite lack of staff capacity as an operational constraint.
+Libraries already have mature automation for predictable work: LibCal blocks an obviously double-booked slot, ILLiad auto-routes the routine borrow, an ILS fires a templated overdue notice on a fixed schedule. What none of that automation does is resolve the conflict that occurs anyway, route the genuinely ambiguous request, or differentiate an overdue response by patron circumstance. That remainder becomes a human review queue, at exactly the point where library staff have the least capacity to absorb it.
+
+The gap is not a hypothesis. It is measured:
+
+- Room-booking demand rose **25% year over year** in 2024, while library staffing **declined 3.6%** in the same year and remains **8.2% below 2019 levels** (11.5% down at small libraries specifically). *Source: Urban Libraries Council, 2025 Library Insights Report.*
+- **57%** of respondents to Library Journal's 2026 *Shifting Sands* budgets and funding survey cite "lack of staff capacity" as an operational constraint, and 30% cite inability to maintain existing staffing levels. *Source: [Library Journal, "Shifting Sands: Budgets and Funding 2026"](https://www.libraryjournal.com/story/shifting-sands-budgets-and-funding-2026).*
+- In Chicago, thousands of returned books have piled up unshelved due to a staffing shortage, with librarians describing a ripple effect that includes a delivery-driver shortage. *Source: [Block Club Chicago, "Thousands Of Books Are Piling Up In Chicago Libraries Due To Staffing Shortage," 2026-08-05](https://blockclubchicago.org/2026/08/05/thousands-of-books-are-piling-up-in-chicago-libraries-due-to-staffing-shortage/).*
+
+Rising demand running directly into a shrinking, under-resourced workforce is exactly the pattern that turns "a case needs judgment" into "the case waits."
 
 A concrete case: an interlibrary-loan request comes in for a title with two different editions available and no indication which one the patron wants. Existing systems can detect that ambiguity. They can't resolve it. Stacks does.
 
@@ -59,7 +67,7 @@ Branch managers, circulation staff, room-booking staff, and ILL coordinators: th
 
 **Stacks:** Case, Context, Policy, Specialist, Safety, then Resolve or human approval.
 
-Stacks targets a different part of the workflow: the ambiguous exception case that traditional automation sends back to staff, not the deterministic routing traditional automation already does well.
+Stacks is not a better rules engine for the work systems already automate well. It is built for the part they hand back: the case with no obvious rule. Two things make that safe to automate at all. First, the safety tier is decided by code, never by the model judging its own confidence, so a confident-sounding wrong answer still stops for a human. Second, it is one agent across all three workflows, not three disconnected tools, so a room-booking case, an ILL case, and an overdue case share the same policy engine, the same memory, and the same audit trail.
 
 **Agent, not chatbot.** A chatbot answers a question. Stacks decides, acts, and produces an outcome. Chatbot: Question, then Answer. Stacks: Case, Decision, Action, Outcome.
 
