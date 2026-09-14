@@ -14,4 +14,10 @@ describe("ActionVsAnswer", () => {
     expect(screen.getByText("Question")).toBeInTheDocument();
     expect(screen.getByText("Outcome")).toBeInTheDocument();
   });
+
+  it("links each named product to its own real source, not a guessed URL", () => {
+    render(<ActionVsAnswer />);
+    expect(screen.getByRole("link", { name: "USF LINK" })).toHaveAttribute("href", "https://guides.lib.usf.edu/AI/LINK");
+    expect(screen.getByRole("link", { name: "SJSU KingbotGPT" })).toHaveAttribute("href", "https://library.sjsu.edu/kingbot");
+  });
 });

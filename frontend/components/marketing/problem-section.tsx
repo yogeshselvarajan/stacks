@@ -1,4 +1,5 @@
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
+import { SourceLink } from "@/components/marketing/source-link";
 
 export function ProblemSection() {
   return (
@@ -39,9 +40,12 @@ export function ProblemSection() {
         </div>
 
         <p className="mt-3 text-xs" style={{ color: "var(--color-ink-faint)" }}>
-          Illustrative, not universal: OCLC&apos;s own Penn State member story documents roughly 30%
-          of ILL borrowing requests staying manual even with automation in place. Figures vary
-          by library and workflow.
+          Illustrative, not universal:{" "}
+          <SourceLink href="https://www.oclc.org/en/member-stories/penn-state.html">
+            OCLC&apos;s own Penn State member story
+          </SourceLink>
+          {" "}documents roughly 30% of ILL borrowing requests staying manual even with
+          automation in place. Figures vary by library and workflow.
         </p>
       </ScrollReveal>
     </section>

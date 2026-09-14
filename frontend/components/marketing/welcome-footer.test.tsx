@@ -15,14 +15,25 @@ describe("WelcomeFooter", () => {
     );
   });
 
-  it("lists only real, actually-used AWS services", () => {
+  it("lists only real, actually-used AWS services, each linked to its own official page", () => {
     render(<WelcomeFooter />);
-    expect(screen.getByText("Amazon Bedrock")).toBeInTheDocument();
-    expect(screen.getByText("Bedrock AgentCore Runtime")).toBeInTheDocument();
-    expect(screen.getByText("AgentCore Memory")).toBeInTheDocument();
-    expect(screen.getByText("Bedrock Guardrails")).toBeInTheDocument();
-    expect(screen.getByText("Amazon DynamoDB")).toBeInTheDocument();
-    expect(screen.getByText("Amazon Cognito")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Amazon Bedrock$/ })).toHaveAttribute("href", "https://aws.amazon.com/bedrock/");
+    expect(screen.getByRole("link", { name: /Bedrock AgentCore Runtime/ })).toHaveAttribute("href", "https://aws.amazon.com/bedrock/agentcore/");
+    expect(screen.getByRole("link", { name: /AgentCore Memory/ })).toHaveAttribute(
+      "href",
+      "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/harness-memory.html",
+    );
+    expect(screen.getByRole("link", { name: /Bedrock Guardrails/ })).toHaveAttribute("href", "https://aws.amazon.com/bedrock/guardrails/");
+    expect(screen.getByRole("link", { name: /Amazon DynamoDB/ })).toHaveAttribute("href", "https://aws.amazon.com/dynamodb/");
+    expect(screen.getByRole("link", { name: /Amazon Cognito/ })).toHaveAttribute("href", "https://aws.amazon.com/cognito/");
+  });
+
+  it("links the hackathon attribution to the real Agents for Humans devpost", () => {
+    render(<WelcomeFooter />);
+    expect(screen.getByRole("link", { name: /Agents for Humans hackathon/ })).toHaveAttribute(
+      "href",
+      "https://agentsforhumans.devpost.com/",
+    );
   });
 
 });

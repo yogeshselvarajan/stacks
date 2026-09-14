@@ -12,4 +12,12 @@ describe("ProblemSection", () => {
     render(<ProblemSection />);
     expect(screen.getByText("Every library system has an exception queue.")).toBeInTheDocument();
   });
+
+  it("links the cited statistic to its real source", () => {
+    render(<ProblemSection />);
+    expect(screen.getByRole("link", { name: /Penn State member story/ })).toHaveAttribute(
+      "href",
+      "https://www.oclc.org/en/member-stories/penn-state.html",
+    );
+  });
 });

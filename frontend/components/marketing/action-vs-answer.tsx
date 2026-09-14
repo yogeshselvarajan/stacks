@@ -1,5 +1,6 @@
 import { ArrowRight, MessageCircle, Workflow } from "lucide-react";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
+import { SourceLink } from "@/components/marketing/source-link";
 
 export function ActionVsAnswer() {
   return (
@@ -13,10 +14,13 @@ export function ActionVsAnswer() {
             Library chatbots inform. Stacks completes the case.
           </h2>
           <p className="mt-4 max-w-2xl text-base leading-relaxed" style={{ color: "var(--color-ink-muted)" }}>
-            Library AI assistants such as USF LINK and SJSU KingbotGPT are genuinely useful,
-            information-oriented systems: they help patrons find services, collections, and
-            spaces. Neither is built to take a transactional action on a case. That is a
-            different job, and it is the one Stacks does.
+            Library AI assistants such as{" "}
+            <SourceLink href="https://guides.lib.usf.edu/AI/LINK">USF LINK</SourceLink>
+            {" "}and{" "}
+            <SourceLink href="https://library.sjsu.edu/kingbot">SJSU KingbotGPT</SourceLink>
+            {" "}are genuinely useful, information-oriented systems: they help patrons find
+            services, collections, and spaces. Neither is built to take a transactional
+            action on a case. That is a different job, and it is the one Stacks does.
           </p>
         </ScrollReveal>
 

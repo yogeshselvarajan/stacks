@@ -4,15 +4,16 @@ import { Reveal } from "@/components/motion/reveal";
 
 // Only real, actually-used services -- confirmed against
 // infra/environments/dev.tfvars and src/stacks/ this session. No invented
-// AWS integrations.
+// AWS integrations. Each links to its own official AWS product/docs page,
+// verified live rather than assumed.
 const AWS_SERVICES = [
-  "Amazon Bedrock",
-  "Amazon Nova",
-  "Bedrock AgentCore Runtime",
-  "AgentCore Memory",
-  "Bedrock Guardrails",
-  "Amazon DynamoDB",
-  "Amazon Cognito",
+  { name: "Amazon Bedrock", href: "https://aws.amazon.com/bedrock/" },
+  { name: "Amazon Nova", href: "https://aws.amazon.com/bedrock/nova/" },
+  { name: "Bedrock AgentCore Runtime", href: "https://aws.amazon.com/bedrock/agentcore/" },
+  { name: "AgentCore Memory", href: "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/harness-memory.html" },
+  { name: "Bedrock Guardrails", href: "https://aws.amazon.com/bedrock/guardrails/" },
+  { name: "Amazon DynamoDB", href: "https://aws.amazon.com/dynamodb/" },
+  { name: "Amazon Cognito", href: "https://aws.amazon.com/cognito/" },
 ];
 
 const PRODUCT_LINKS = [
@@ -62,13 +63,17 @@ export function WelcomeFooter() {
             </p>
             <ul className="mt-3 flex flex-wrap gap-2">
               {AWS_SERVICES.map((service) => (
-                <li
-                  key={service}
-                  className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium"
-                  style={{ borderColor: "var(--color-border)", color: "var(--color-ink-muted)" }}
-                >
-                  <Cpu size={12} aria-hidden="true" />
-                  {service}
+                <li key={service.name}>
+                  <a
+                    href={service.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="stacks-focus-ring flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:border-[var(--color-accent)]"
+                    style={{ borderColor: "var(--color-border)", color: "var(--color-ink-muted)", transitionDuration: "var(--motion-duration-feedback)" }}
+                  >
+                    <Cpu size={12} aria-hidden="true" />
+                    {service.name}
+                  </a>
                 </li>
               ))}
             </ul>
@@ -82,7 +87,18 @@ export function WelcomeFooter() {
             className="mt-3 flex flex-col gap-3 border-t pt-6 text-sm sm:flex-row sm:items-center sm:justify-between"
             style={{ borderColor: "var(--color-border)", color: "var(--color-ink-faint)" }}
           >
-            <p>Stacks · Good Neighbor Agents, Agents for Humans hackathon</p>
+            <p>
+              Stacks · Good Neighbor Agents,{" "}
+              <Link
+                href="https://agentsforhumans.devpost.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="stacks-focus-ring rounded-sm underline-offset-4 hover:underline"
+                style={{ color: "inherit" }}
+              >
+                Agents for Humans hackathon
+              </Link>
+            </p>
             <p className="flex items-center gap-1.5">
               Developed with
               <Heart size={14} aria-hidden="true" style={{ color: "var(--color-tier-red-text)" }} />
