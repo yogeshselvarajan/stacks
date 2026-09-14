@@ -7,18 +7,28 @@ vi.mock("@/lib/api/approvals", () => ({
   getApprovals: vi.fn(),
 }));
 
+vi.mock("@/lib/api/auth", () => ({
+  getSession: vi.fn(),
+}));
+
 import { getApprovals } from "@/lib/api/approvals";
+import { getSession } from "@/lib/api/auth";
 
 const mockUsePathname = vi.fn(() => "/approvals");
+const mockRouterPush = vi.fn();
 vi.mock("next/navigation", () => ({
   usePathname: () => mockUsePathname(),
+  useRouter: () => ({ push: mockRouterPush }),
 }));
 
 describe("ApprovalsLayout", () => {
   beforeEach(() => {
     mockUsePathname.mockReturnValue("/approvals");
+    mockRouterPush.mockReset();
     vi.mocked(getApprovals).mockReset();
     vi.mocked(getApprovals).mockResolvedValue(APPROVAL_CASES_FIXTURE);
+    vi.mocked(getSession).mockReset();
+    vi.mocked(getSession).mockResolvedValue({ role: "branch_manager", libraryId: "lib-1", caseReviewRole: null });
   });
 
   it("renders the persistent case list alongside the routed child content", async () => {

@@ -9,7 +9,7 @@ const plexMono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-mono-load
 export const metadata: Metadata = {
   title: {
     default: "Stacks",
-    template: "%s | Stacks",
+    template: "Stacks | %s",
   },
   description: "Stacks resolves room-booking conflicts, routes ambiguous interlibrary-loan requests, and chases overdue items for library staff, automatically when it's safe and with a human in the loop when it isn't.",
   openGraph: {

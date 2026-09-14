@@ -1,66 +1,56 @@
-"use client";
+import type { Metadata } from "next";
+import { WelcomeNav } from "@/components/marketing/welcome-nav";
+import { Hero } from "@/components/marketing/hero";
+import { ProblemSection } from "@/components/marketing/problem-section";
+import { StartsWhereTheyStop } from "@/components/marketing/starts-where-they-stop";
+import { WorkflowsSection } from "@/components/marketing/workflows-section";
+import { ActionVsAnswer } from "@/components/marketing/action-vs-answer";
+import { SafetySection } from "@/components/marketing/safety-section";
+import { PolicySection } from "@/components/marketing/policy-section";
+import { CapabilityGrid } from "@/components/marketing/capability-grid";
+import { AuditPreview } from "@/components/marketing/audit-preview";
+import { AwsArchitecture } from "@/components/marketing/aws-architecture";
+import { CtaSection } from "@/components/marketing/cta-section";
+import { WelcomeFooter } from "@/components/marketing/welcome-footer";
 
-import { useEffect, useState } from "react";
-import { AppShell } from "@/components/app-shell";
-import { HomeView } from "@/components/home-view";
-import { getApprovals } from "@/lib/api/approvals";
-import { getAuditList } from "@/lib/api/audit";
-import { AuditEntry } from "@/lib/api/types";
+export const metadata: Metadata = {
+  title: { absolute: "Stacks | Task-completion agent for library operations" },
+  description:
+    "Stacks resolves room-booking conflicts, routes ambiguous interlibrary-loan requests, and chases overdue items, automatically when it's safe, with a human in the loop when it isn't. Built on Amazon Bedrock AgentCore.",
+  openGraph: {
+    title: "Stacks, a library task-completion agent",
+    description:
+      "Automate the routine, keep a human on anything sensitive. Built on Amazon Bedrock AgentCore for the Agents for Humans hackathon.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Stacks, a library task-completion agent",
+    description: "Automate the routine, keep a human on anything sensitive.",
+  },
+  alternates: {
+    canonical: "/",
+  },
+};
 
-function isToday(timestamp: string): boolean {
-  const entryDate = new Date(timestamp);
-  const now = new Date();
+export default function RootPage() {
   return (
-    entryDate.getUTCFullYear() === now.getUTCFullYear() &&
-    entryDate.getUTCMonth() === now.getUTCMonth() &&
-    entryDate.getUTCDate() === now.getUTCDate()
-  );
-}
-
-export default function HomePage() {
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [pendingByTier, setPendingByTier] = useState<{ GREEN: number; YELLOW: number; RED: number } | null>(null);
-  const [resolvedTodayCount, setResolvedTodayCount] = useState<number | null>(null);
-  const [recentActivity, setRecentActivity] = useState<AuditEntry[] | null>(null);
-
-  useEffect(() => {
-    getApprovals()
-      .then((cases) => {
-        const counts = { GREEN: 0, YELLOW: 0, RED: 0 };
-        for (const c of cases) counts[c.tier] += 1;
-        setPendingByTier(counts);
-        setStatus("ready");
-      })
-      .catch(() => setStatus("error"));
-
-    getAuditList()
-      .then((audit) => {
-        const sorted = [...audit].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setRecentActivity(sorted.slice(0, 5));
-        setResolvedTodayCount(audit.filter((e) => isToday(e.timestamp)).length);
-      })
-      .catch(() => {
-        // Supplementary data -- a failure here should not block the page or
-        // hide the pending-tier counts, which is the number that actually
-        // matters. resolvedTodayCount/recentActivity simply stay null, and
-        // HomeView's ready-state rendering already handles null for both.
-      });
-  }, []);
-
-  return (
-    <AppShell
-      role="branch_manager"
-      tenantName="Central Branch"
-      pendingCounts={{ approvals: (pendingByTier?.YELLOW ?? 0) + (pendingByTier?.RED ?? 0) }}
-      activeRoute="/"
-    >
-      <HomeView
-        status={status}
-        pendingByTier={pendingByTier}
-        lastSweepSummary={null}
-        resolvedTodayCount={resolvedTodayCount}
-        recentActivity={recentActivity}
-      />
-    </AppShell>
+    <div style={{ background: "var(--color-bg)", minHeight: "100vh" }}>
+      <WelcomeNav />
+      <main>
+        <Hero />
+        <ProblemSection />
+        <StartsWhereTheyStop />
+        <WorkflowsSection />
+        <ActionVsAnswer />
+        <SafetySection />
+        <PolicySection />
+        <CapabilityGrid />
+        <AuditPreview />
+        <AwsArchitecture />
+        <CtaSection />
+      </main>
+      <WelcomeFooter />
+    </div>
   );
 }

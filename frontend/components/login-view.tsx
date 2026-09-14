@@ -21,7 +21,7 @@ export function LoginView({
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4" style={{ background: "var(--color-bg)" }}>
       <Reveal>
-        <Link href="/welcome" className="stacks-focus-ring flex items-center gap-2 rounded-md">
+        <Link href="/" className="stacks-focus-ring flex items-center gap-2 rounded-md">
           <Library size={20} aria-hidden="true" style={{ color: "var(--color-accent)" }} />
           <span className="font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-ink)" }}>
             Stacks

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LoginView } from "@/components/login-view";
 import { login } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/types";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -16,7 +17,9 @@ export default function LoginPage() {
     setErrorMessage(null);
     try {
       await login(username, password);
-      router.push("/");
+      const redirectTarget = searchParams.get("redirect");
+      const isSafeInternalPath = !!redirectTarget && redirectTarget.startsWith("/") && !redirectTarget.startsWith("//");
+      router.push(isSafeInternalPath ? redirectTarget! : "/console");
     } catch (err) {
       setStatus("error");
       setErrorMessage(
@@ -28,4 +31,16 @@ export default function LoginPage() {
   }
 
   return <LoginView onSubmit={handleSubmit} status={status} errorMessage={errorMessage} />;
+}
+
+export default function LoginPage() {
+  useEffect(() => {
+    document.title = "Stacks | Sign in";
+  }, []);
+
+  return (
+    <Suspense fallback={<LoginView onSubmit={() => {}} status="idle" errorMessage={null} />}>
+      <LoginForm />
+    </Suspense>
+  );
 }

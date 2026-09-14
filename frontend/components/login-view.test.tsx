@@ -55,9 +55,9 @@ describe("LoginView", () => {
     expect(screen.getByLabelText("Password")).toBeRequired();
   });
 
-  it("carries the Stacks wordmark back to /welcome, matching the public site's own mark", () => {
+  it("carries the Stacks wordmark back to /, matching the public site's own mark", () => {
     render(<LoginView onSubmit={vi.fn()} status="idle" errorMessage={null} />);
-    expect(screen.getByRole("link", { name: "Stacks" })).toHaveAttribute("href", "/welcome");
+    expect(screen.getByRole("link", { name: "Stacks" })).toHaveAttribute("href", "/");
   });
 
   it("the login card sits on the surface token with a hairline border, not the canvas background", () => {

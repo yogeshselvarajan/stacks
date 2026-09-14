@@ -36,7 +36,7 @@ export function WelcomeNav() {
         aria-label="Primary"
         className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4"
       >
-        <Link href="/welcome" className="stacks-focus-ring flex items-center gap-2 rounded-md">
+        <Link href="/" className="stacks-focus-ring flex items-center gap-2 rounded-md">
           <Library size={20} aria-hidden="true" style={{ color: "var(--color-accent)" }} />
           <span className="font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-ink)" }}>
             Stacks

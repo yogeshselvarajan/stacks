@@ -1,14 +1,21 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ApprovalInboxView } from "@/components/approval-inbox-view";
 import { ApprovalQueueProvider, useApprovalQueue } from "@/lib/approval-queue-context";
+import { useRequireSession } from "@/lib/use-require-session";
 
 function TwoPane({ children }: { children: React.ReactNode }) {
+  useRequireSession();
   const { cases, status, resolvingCaseId } = useApprovalQueue();
   const pathname = usePathname();
   const activeCaseId = pathname.startsWith("/approvals/") ? decodeURIComponent(pathname.slice("/approvals/".length)) : null;
+
+  useEffect(() => {
+    document.title = "Stacks | Approvals";
+  }, []);
 
   return (
     <AppShell role="branch_manager" tenantName="Central Branch" pendingCounts={{ approvals: cases.length }} activeRoute="/approvals">

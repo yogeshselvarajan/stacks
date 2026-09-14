@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { Inbox, Calendar, BookOpen, Clock3, ScrollText, Library } from "lucide-react";
+import { Inbox, Calendar, BookOpen, Clock3, ScrollText, Library, Home } from "lucide-react";
 import { LiveDot } from "@/components/motion/live-dot";
 
 type Role = "circulation_staff" | "room_booking_staff" | "ill_coordinator" | "branch_manager";
 
 type NavItem = { href: string; label: string; Icon: typeof Inbox; countKey: "approvals" | null };
+
+const HOME_ITEM: NavItem = { href: "/console", label: "Home", Icon: Home, countKey: null };
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
@@ -48,6 +50,26 @@ export function AppShell({
             {tenantName}
           </span>
         </div>
+
+        <ul className="mb-4 space-y-0.5">
+          <li>
+            <Link
+              href={HOME_ITEM.href}
+              aria-current={activeRoute === HOME_ITEM.href ? "page" : undefined}
+              className="stacks-focus-ring flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--color-surface-2)] active:bg-[var(--color-border)]"
+              style={{
+                transitionDuration: "var(--motion-duration-feedback)",
+                transitionTimingFunction: "var(--motion-ease-feedback)",
+                color: activeRoute === HOME_ITEM.href ? "var(--color-accent)" : "var(--color-ink)",
+                background: activeRoute === HOME_ITEM.href ? "var(--color-surface-2)" : "transparent",
+                borderLeft: activeRoute === HOME_ITEM.href ? "2px solid var(--color-accent)" : "2px solid transparent",
+              }}
+            >
+              <HOME_ITEM.Icon size={18} aria-hidden="true" />
+              {HOME_ITEM.label}
+            </Link>
+          </li>
+        </ul>
 
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="mb-4">
@@ -121,7 +143,10 @@ export function AppShell({
           className="flex items-center justify-between border-b px-6 py-3"
           style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}
         >
-          <span className="font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-ink)" }}>Stacks</span>
+          <span className="flex items-center gap-1.5 font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-ink)" }}>
+            <Library size={16} aria-hidden="true" style={{ color: "var(--color-accent)" }} />
+            Stacks
+          </span>
           <span className="text-sm" style={{ color: "var(--color-ink-muted)" }}>{role.replace(/_/g, " ")}</span>
         </header>
         <main className="p-6">{children}</main>
