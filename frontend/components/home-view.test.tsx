@@ -77,4 +77,21 @@ describe("HomeView", () => {
     render(<HomeView status="error" pendingByTier={null} lastSweepSummary={null} resolvedTodayCount={null} recentActivity={null} />);
     expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
   });
+
+  it("attention-first: leads with a link to the approval inbox when cases are waiting", () => {
+    render(
+      <HomeView status="ready" pendingByTier={{ GREEN: 9, YELLOW: 2, RED: 1 }} lastSweepSummary={null} resolvedTodayCount={17} recentActivity={[]} />
+    );
+    expect(screen.getByText("Needs your attention")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /open approval inbox/i });
+    expect(link).toHaveAttribute("href", "/approvals");
+  });
+
+  it("attention-first: shows a calm all-clear message, not a link, when nothing is waiting", () => {
+    render(
+      <HomeView status="ready" pendingByTier={{ GREEN: 9, YELLOW: 0, RED: 0 }} lastSweepSummary={null} resolvedTodayCount={17} recentActivity={[]} />
+    );
+    expect(screen.getByText("Nothing needs you right now")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /open approval inbox/i })).toBeNull();
+  });
 });

@@ -1,0 +1,6 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Stacks">
+  <rect width="64" height="64" rx="14" fill="#0A0E11" />
+  <rect x="14" y="17" width="36" height="7" rx="2" fill="#5B8DEF" />
+  <rect x="14" y="28.5" width="36" height="7" rx="2" fill="#7BA3F5" />
+  <rect x="14" y="40" width="24" height="7" rx="2" fill="#5B8DEF" />
+</svg>

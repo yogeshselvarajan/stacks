@@ -6,6 +6,17 @@ import { TierBadge } from "./tier-badge";
 
 type ActionStatus = "idle" | "submitting" | "error";
 
+const WHY_THIS_NEEDS_REVIEW: Record<ApprovalCase["tier"], string> = {
+  RED: "This action affects a sensitive record or an external recipient and cannot be automated. A qualified reviewer must decide before anything commits.",
+  YELLOW: "Stacks prepared this action and is waiting for your confirmation before it commits.",
+  GREEN: "Stacks resolved this automatically. It is shown here only for reference.",
+};
+
+const EYEBROW_STYLE: React.CSSProperties = {
+  fontFamily: "var(--font-mono)",
+  color: "var(--color-ink-faint)",
+};
+
 const PRIMARY_BUTTON_CLASS =
   "stacks-focus-ring rounded px-4 py-2 text-sm font-medium transition-all hover:brightness-90 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60";
 const SECONDARY_BUTTON_CLASS =
@@ -33,8 +44,20 @@ export function ApprovalCaseDetail({
 
   return (
     <div className={resolving ? "space-y-4 approval-detail-resolving" : "space-y-4"}>
-      <TierBadge tier={theCase.tier} />
-      <p className="text-sm" style={{ color: "var(--color-ink)" }}>{theCase.summary}</p>
+      <div className="flex items-center justify-between">
+        <TierBadge tier={theCase.tier} />
+        <span className="text-xs uppercase tracking-wide" style={EYEBROW_STYLE}>Case {theCase.caseId}</span>
+      </div>
+
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={EYEBROW_STYLE}>Why this needs review</p>
+        <p className="text-sm" style={{ color: "var(--color-ink-muted)" }}>{WHY_THIS_NEEDS_REVIEW[theCase.tier]}</p>
+      </div>
+
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={EYEBROW_STYLE}>Proposed action</p>
+        <p className="text-sm" style={{ color: "var(--color-ink)" }}>{theCase.summary}</p>
+      </div>
 
       {theCase.tier === "YELLOW" && (
         <label
@@ -60,12 +83,10 @@ export function ApprovalCaseDetail({
       )}
 
       {theCase.recallSummary && (
-        <p
-          className="rounded-lg border p-3 text-sm"
-          style={{ borderColor: "var(--color-border)", background: "var(--color-surface-2)", color: "var(--color-ink-muted)" }}
-        >
-          {theCase.recallSummary}
-        </p>
+        <div className="rounded-lg border p-3" style={{ borderColor: "var(--color-border)", background: "var(--color-surface-2)" }}>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={EYEBROW_STYLE}>Context recalled</p>
+          <p className="text-sm" style={{ color: "var(--color-ink-muted)" }}>{theCase.recallSummary}</p>
+        </div>
       )}
 
       {actionStatus === "error" && (

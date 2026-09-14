@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { CheckCircle2, Inbox } from "lucide-react";
 import { CardSkeleton } from "./skeletons";
 import { AuditEntry } from "@/lib/api/types";
 
@@ -51,12 +53,57 @@ export function HomeView({
 
   const yellow = pendingByTier?.YELLOW ?? 0;
   const red = pendingByTier?.RED ?? 0;
+  const needsAttention = yellow + red;
 
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-ink)" }}>
         Welcome back
       </h1>
+
+      {/* Attention-first: what needs the staff member right now, before any
+          secondary metric. A library staff member's actual first question
+          is "what needs me", not "what happened" -- so this is the first
+          thing on the page, not a KPI card among equals. */}
+      {needsAttention > 0 ? (
+        <Link
+          href="/approvals"
+          className="stacks-focus-ring flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-[var(--color-surface-2)]"
+          style={{
+            borderColor: "var(--color-tier-red-fill)",
+            background: "var(--color-tier-red-bg)",
+            transitionDuration: "var(--motion-duration-feedback)",
+          }}
+        >
+          <span className="flex items-center gap-3">
+            <Inbox size={20} aria-hidden="true" style={{ color: "var(--color-tier-red-text)" }} />
+            <span>
+              <span className="block text-sm font-semibold" style={{ color: "var(--color-tier-red-text)" }}>
+                Needs your attention
+              </span>
+              <span className="block text-sm" style={{ color: "var(--color-ink-muted)" }}>
+                {red > 0 && `${red} case${red === 1 ? "" : "s"} awaiting review`}
+                {red > 0 && yellow > 0 && ", "}
+                {yellow > 0 && `${yellow} awaiting confirmation`}
+              </span>
+            </span>
+          </span>
+          <span className="text-sm font-medium" style={{ color: "var(--color-accent)" }}>
+            Open approval inbox &rarr;
+          </span>
+        </Link>
+      ) : (
+        <div
+          className="flex items-center gap-3 rounded-lg border p-4"
+          style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}
+        >
+          <CheckCircle2 size={20} aria-hidden="true" style={{ color: "var(--color-tier-green-text)" }} />
+          <div>
+            <p className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>Nothing needs you right now</p>
+            <p className="text-sm" style={{ color: "var(--color-ink-muted)" }}>Every case is either resolved or still routine.</p>
+          </div>
+        </div>
+      )}
 
       <div className={lastSweepSummary ? "grid grid-cols-4 gap-3" : "grid grid-cols-3 gap-3"}>
         <KpiCard label="Red pending" value={red} valueColor="var(--color-tier-red-text)" />
@@ -77,7 +124,7 @@ export function HomeView({
           className="mb-2 text-xs font-medium uppercase tracking-wide"
           style={{ fontFamily: "var(--font-mono)", color: "var(--color-ink-muted)" }}
         >
-          Activity
+          Recent activity
         </p>
         {recentActivity && recentActivity.length > 0 ? (
           <ul className="space-y-1.5">

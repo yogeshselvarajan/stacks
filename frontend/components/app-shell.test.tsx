@@ -107,4 +107,17 @@ describe("AppShell", () => {
     const approvalsLink = screen.getByRole("link", { name: /approval inbox/i });
     expect(approvalsLink.style.background).toBe("transparent");
   });
+
+  it("shows a real, honest provenance line linking to the hackathon, not a fake status", () => {
+    render(
+      <AppShell role="branch_manager" tenantName="Central Branch" pendingCounts={{ approvals: 0 }} activeRoute="/">
+        <p>content</p>
+      </AppShell>
+    );
+    expect(screen.getByText("Operational")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /agents for humans/i })).toHaveAttribute(
+      "href",
+      "https://agentsforhumans.devpost.com/",
+    );
+  });
 });

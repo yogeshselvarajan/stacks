@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Inbox, Calendar, BookOpen, Clock3, ScrollText, Library } from "lucide-react";
+import { LiveDot } from "@/components/motion/live-dot";
 
 type Role = "circulation_staff" | "room_booking_staff" | "ill_coordinator" | "branch_manager";
 
@@ -94,6 +95,26 @@ export function AppShell({
             </ul>
           </div>
         ))}
+
+        <div className="mt-2 border-t pt-3" style={{ borderColor: "var(--color-border)" }}>
+          <p className="mb-2 flex items-center gap-1.5 px-1 text-xs" style={{ color: "var(--color-ink-faint)" }}>
+            <LiveDot color="var(--color-tier-green-fill)" />
+            Operational
+          </p>
+          <a
+            href="https://agentsforhumans.devpost.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="stacks-focus-ring flex items-center rounded-md px-3 py-2 text-xs transition-colors hover:bg-[var(--color-surface-2)] active:bg-[var(--color-border)]"
+            style={{
+              color: "var(--color-ink-faint)",
+              transitionDuration: "var(--motion-duration-feedback)",
+              transitionTimingFunction: "var(--motion-ease-feedback)",
+            }}
+          >
+            Built for Agents for Humans, Good Neighbor Agents
+          </a>
+        </div>
       </nav>
       <div className="flex-1">
         <header

@@ -105,4 +105,20 @@ describe("ApprovalCaseDetail", () => {
     render(<ApprovalCaseDetail case={YELLOW_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="submitting" resolving={true} />);
     expect(screen.getByTestId("trust-mode-toggle").querySelector("input[type='checkbox']")).toBeDisabled();
   });
+
+  it("explains why a RED case needs review, distinctly from a YELLOW one", () => {
+    render(<ApprovalCaseDetail case={RED_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
+    expect(screen.getByText("Why this needs review")).toBeInTheDocument();
+    expect(screen.getByText(/qualified reviewer must decide/i)).toBeInTheDocument();
+  });
+
+  it("explains a YELLOW case with its own distinct copy, not RED's", () => {
+    render(<ApprovalCaseDetail case={YELLOW_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
+    expect(screen.getByText(/waiting for your confirmation/i)).toBeInTheDocument();
+  });
+
+  it("shows the case id for reference", () => {
+    render(<ApprovalCaseDetail case={RED_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
+    expect(screen.getByText(`Case ${RED_CASE.caseId}`)).toBeInTheDocument();
+  });
 });
