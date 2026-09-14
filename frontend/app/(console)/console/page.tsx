@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { HomeView } from "@/components/home-view";
 import { getApprovals } from "@/lib/api/approvals";
 import { getAuditList } from "@/lib/api/audit";
-import { AuditEntry } from "@/lib/api/types";
+import { ApiError, AuditEntry } from "@/lib/api/types";
 import { usePolling } from "@/lib/use-polling";
 
 function isToday(timestamp: string): boolean {
@@ -22,6 +23,7 @@ export default function ConsolePage() {
     document.title = "Stacks | Home";
   }, []);
 
+  const router = useRouter();
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [pendingByTier, setPendingByTier] = useState<{ GREEN: number; YELLOW: number; RED: number } | null>(null);
   const [resolvedTodayCount, setResolvedTodayCount] = useState<number | null>(null);
@@ -35,7 +37,18 @@ export default function ConsolePage() {
         setPendingByTier(counts);
         setStatus("ready");
       })
-      .catch(() => setStatus("error"));
+      .catch((err) => {
+        // I6 (final review fix round): an expired session otherwise turns
+        // every 15-second poll into a silent, permanently-repeating 401
+        // with no recovery. Only a 401 is recoverable by redirecting to
+        // /login -- a network error or a 500 should just surface as the
+        // existing error state, not send a signed-in user away.
+        if (err instanceof ApiError && err.status === 401) {
+          router.push("/login");
+          return;
+        }
+        setStatus("error");
+      });
 
     getAuditList()
       .then((audit) => {

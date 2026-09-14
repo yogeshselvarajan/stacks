@@ -15,17 +15,18 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from stacks.data.models import BookingRecord, BookingType, CirculationRecord, ILLRequestRecord
 from stacks.data.repository import LibraryDataRepository
+from stacks.hitl.pending_approvals import PendingApprovalsSink
 from stacks.hooks.audit_log import AuditLogRecord, AuditLogSink
 from stacks.identity.claims import StaffIdentityClaims
 from stacks.types import AuditActor, SensitivityFlag
 
 from bff.clients.agent_runtime import AgentRuntimeClient
 from bff.csrf import verify_csrf
-from bff.deps import get_agent_runtime_client, get_audit_sink, get_current_claims, get_repo
+from bff.deps import get_agent_runtime_client, get_audit_sink, get_current_claims, get_pending_approvals_sink, get_repo
 from bff.rate_limit import enforce_case_creation_rate_limit
 
 router = APIRouter()
@@ -206,6 +207,31 @@ class CreateBookingBody(BaseModel):
     bookingType: Literal["recurring_program", "one_off_renter", "staff_internal", "walk_in"]
     bookedBy: str = Field(min_length=1)
 
+    @field_validator("start", "end")
+    @classmethod
+    def _coerce_naive_to_utc(cls, value: datetime) -> datetime:
+        # C1 (final review fix round): frontend/components/new-booking-form.tsx
+        # uses <input type="datetime-local">, which produces a naive string
+        # (e.g. "2026-10-01T10:00", no timezone offset). Every stored
+        # BookingRecord is timezone-aware, and the repository's overlap
+        # check (b.start < end and start < b.end) raises TypeError when one
+        # side is naive and the other aware -- reproduced live as a real 500
+        # on exactly this payload shape. Treat a naive value as already
+        # being UTC (the BFF/agent's own timezone) instead of letting the
+        # mismatch reach that comparison.
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    @model_validator(mode="after")
+    def _end_after_start(self) -> "CreateBookingBody":
+        # I1 (final review fix round): an inverted range must never be
+        # accepted -- previously it silently returned 200/no_conflict and
+        # persisted a corrupt booking with end before start.
+        if self.end <= self.start:
+            raise ValueError("end must be after start")
+        return self
+
 
 @router.post("/api/bookings", dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit)])
 async def create_booking(
@@ -214,6 +240,7 @@ async def create_booking(
     repo: LibraryDataRepository = Depends(get_repo),
     audit_sink: AuditLogSink = Depends(get_audit_sink),
     agent_runtime_client: AgentRuntimeClient = Depends(get_agent_runtime_client),
+    pending_approvals_sink: PendingApprovalsSink = Depends(get_pending_approvals_sink),
 ) -> dict:
     booking_id = f"b_{uuid.uuid4().hex[:12]}"
     new_booking = BookingRecord(
@@ -249,7 +276,7 @@ async def create_booking(
     existing = await run_in_threadpool(repo.get_bookings_for_room, claims.library_id, body.roomId, body.start, body.end)
     overlapping = [b for b in existing if b.booking_id != booking_id]
     if not overlapping:
-        return {"bookingId": booking_id, "status": "no_conflict", "outcome": None, "conflictingBookingIds": None}
+        return {"bookingId": booking_id, "status": "no_conflict", "outcome": None, "conflictingBookingIds": None, "caseId": None}
 
     conflicting_ids = [booking_id] + [b.booking_id for b in overlapping]
     invoke_payload = {
@@ -269,11 +296,41 @@ async def create_booking(
     except Exception:
         logger.exception("booking_agent_invocation_failed")
         await run_in_threadpool(repo.delete_booking, claims.library_id, booking_id)
-        return {"bookingId": booking_id, "status": "agent_invocation_failed", "outcome": None, "conflictingBookingIds": conflicting_ids}
+        return {
+            "bookingId": booking_id, "status": "agent_invocation_failed", "outcome": None,
+            "conflictingBookingIds": conflicting_ids, "caseId": None,
+        }
 
     if agent_response.get("stop_reason") == "interrupt":
-        return {"bookingId": booking_id, "status": "pending_approval", "outcome": None, "conflictingBookingIds": conflicting_ids}
+        # I4 (final review fix round): the real case id the backend
+        # persists (hitl_gate.py's _case_id_for) is derived from whatever
+        # conflicting_booking_ids the AGENT itself passed to
+        # resolve_room_conflict at commit time -- not guaranteed to be the
+        # same set this endpoint's own overlap-detection found above. Look
+        # up the actual pending-approval record instead of having the
+        # frontend reconstruct the id from conflictingBookingIds.
+        case_id = await run_in_threadpool(_find_pending_room_booking_case_id, pending_approvals_sink, claims.library_id, booking_id)
+        return {
+            "bookingId": booking_id, "status": "pending_approval", "outcome": None,
+            "conflictingBookingIds": conflicting_ids, "caseId": case_id,
+        }
     tool_outcome = agent_response.get("tool_outcome")
     if tool_outcome == "committed":
-        return {"bookingId": booking_id, "status": "resolved", "outcome": tool_outcome, "conflictingBookingIds": conflicting_ids}
-    return {"bookingId": booking_id, "status": "needs_attention", "outcome": tool_outcome, "conflictingBookingIds": conflicting_ids}
+        return {
+            "bookingId": booking_id, "status": "resolved", "outcome": tool_outcome,
+            "conflictingBookingIds": conflicting_ids, "caseId": None,
+        }
+    return {
+        "bookingId": booking_id, "status": "needs_attention", "outcome": tool_outcome,
+        "conflictingBookingIds": conflicting_ids, "caseId": None,
+    }
+
+
+def _find_pending_room_booking_case_id(sink: PendingApprovalsSink, library_id: str, booking_id: str) -> str | None:
+    records = sink.list_for_library(library_id)
+    for record in records:
+        if record.workflow != "room_booking":
+            continue
+        if booking_id in record.case_id.split(":"):
+            return record.case_id
+    return None

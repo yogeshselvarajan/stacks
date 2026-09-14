@@ -53,11 +53,15 @@ describe("NewBookingForm", () => {
   });
 
   it("shows a link into the Approval Inbox when the case lands as pending approval", async () => {
+    // I4 (final review fix round): the link now uses the real caseId the
+    // backend returns (looked up from the actual pending-approval record),
+    // never a client-side reconstruction from conflictingBookingIds.
     vi.mocked(calendarApi.createBooking).mockResolvedValue({
       bookingId: "b_abc123",
       status: "pending_approval",
       outcome: null,
       conflictingBookingIds: ["b_zzz", "b_aaa"],
+      caseId: "b_aaa:b_zzz",
     });
     render(<NewBookingForm />);
     fireEvent.click(screen.getByRole("button", { name: /new room booking/i }));
@@ -71,12 +75,36 @@ describe("NewBookingForm", () => {
     expect(link).toHaveAttribute("href", "/approvals/b_aaa:b_zzz");
   });
 
+  it("shows the pending-approval message without a link when the backend finds no matching case id", async () => {
+    // I4 (final review fix round): if status is pending_approval but the
+    // backend's own lookup found no matching record, caseId is null -- the
+    // message must still render, just without a (necessarily broken) link.
+    vi.mocked(calendarApi.createBooking).mockResolvedValue({
+      bookingId: "b_abc124",
+      status: "pending_approval",
+      outcome: null,
+      conflictingBookingIds: ["b_zzz", "b_aaa"],
+      caseId: null,
+    });
+    render(<NewBookingForm />);
+    fireEvent.click(screen.getByRole("button", { name: /new room booking/i }));
+    fireEvent.change(screen.getByLabelText("Room"), { target: { value: "room_a" } });
+    fireEvent.change(screen.getByLabelText("Start"), { target: { value: "2026-10-01T10:00" } });
+    fireEvent.change(screen.getByLabelText("End"), { target: { value: "2026-10-01T11:00" } });
+    fireEvent.change(screen.getByLabelText("Booked by"), { target: { value: "patron_x" } });
+    fireEvent.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByText(/conflict detected. stacks needs a human decision/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /review in approval inbox/i })).toBeNull();
+  });
+
   it("shows a resolved message, not a pending-approval link, when the case auto-resolves", async () => {
     vi.mocked(calendarApi.createBooking).mockResolvedValue({
       bookingId: "b_def456",
       status: "resolved",
       outcome: "committed",
       conflictingBookingIds: ["b_def456"],
+      caseId: null,
     });
     render(<NewBookingForm />);
     fireEvent.click(screen.getByRole("button", { name: /new room booking/i }));
@@ -96,6 +124,7 @@ describe("NewBookingForm", () => {
       status: "needs_attention",
       outcome: "blocked_missing_approval",
       conflictingBookingIds: ["b_needs1"],
+      caseId: null,
     });
     render(<NewBookingForm />);
     fireEvent.click(screen.getByRole("button", { name: /new room booking/i }));
@@ -116,6 +145,7 @@ describe("NewBookingForm", () => {
       status: "agent_invocation_failed",
       outcome: null,
       conflictingBookingIds: ["b_fail1"],
+      caseId: null,
     });
     render(<NewBookingForm />);
     fireEvent.click(screen.getByRole("button", { name: /new room booking/i }));
@@ -130,7 +160,7 @@ describe("NewBookingForm", () => {
 
   it("shows a clear no-conflict message when the submitted booking does not overlap anything", async () => {
     vi.mocked(calendarApi.createBooking).mockResolvedValue({
-      bookingId: "b_new1", status: "no_conflict", outcome: null, conflictingBookingIds: null,
+      bookingId: "b_new1", status: "no_conflict", outcome: null, conflictingBookingIds: null, caseId: null,
     });
     render(<NewBookingForm />);
     fireEvent.click(screen.getByRole("button", { name: /new room booking/i }));
@@ -159,7 +189,7 @@ describe("NewBookingForm", () => {
   it("calls onCreated after a successful submission", async () => {
     const onCreated = vi.fn();
     vi.mocked(calendarApi.createBooking).mockResolvedValue({
-      bookingId: "b_ghi789", status: "resolved", outcome: "committed", conflictingBookingIds: ["b_ghi789"],
+      bookingId: "b_ghi789", status: "resolved", outcome: "committed", conflictingBookingIds: ["b_ghi789"], caseId: null,
     });
     render(<NewBookingForm onCreated={onCreated} />);
     fireEvent.click(screen.getByRole("button", { name: /new room booking/i }));

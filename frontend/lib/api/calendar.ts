@@ -19,6 +19,13 @@ export interface CreateBookingResult {
   status: "resolved" | "needs_attention" | "pending_approval" | "agent_invocation_failed" | "no_conflict";
   outcome: string | null;
   conflictingBookingIds: string[] | null;
+  // I4 (final review fix round): the real case id the backend persists,
+  // looked up server-side from the pending-approvals record the agent
+  // invocation actually created -- never reconstructed client-side from
+  // conflictingBookingIds, which is not guaranteed to match the set the
+  // agent itself used. Null unless status is "pending_approval" and a
+  // matching record was found.
+  caseId: string | null;
 }
 
 export function createBooking(input: CreateBookingInput): Promise<CreateBookingResult> {

@@ -9,8 +9,10 @@ from stacks.hooks.audit_log import AuditLogSink
 from stacks.identity.claims import StaffIdentityClaims
 
 from bff.clients.agent_runtime import FakeAgentRuntimeClient
+from bff.csrf import verify_csrf
 from bff.deps import get_agent_runtime_client, get_audit_sink, get_current_claims, get_repo
 from bff.main import app
+from bff.rate_limit import RateLimiter, get_case_creation_rate_limiter
 
 
 @pytest.fixture
@@ -144,3 +146,83 @@ def test_agent_invocation_failure_deletes_the_orphaned_booking(wired):
     assert repo.get_booking("lib_demo", booking_id) is None
     # The pre-existing conflicting booking must survive; only the new one is cleaned up
     assert repo.get_booking("lib_demo", "b_existing4") is not None
+
+
+def test_a_naive_datetime_matching_the_real_html_form_still_detects_a_conflict(wired):
+    # C1 (final review fix round): frontend/components/new-booking-form.tsx's
+    # <input type="datetime-local"> produces exactly this naive shape (no
+    # +00:00 suffix). Before the fix, comparing it against an existing
+    # timezone-aware booking raised TypeError inside the repository's
+    # overlap check -- reproduced live as a real 500. A 200 with a
+    # non-no_conflict status here proves the overlap comparison actually
+    # ran (and found the conflict) despite the naive input, not that the
+    # crash was merely swallowed.
+    client, repo, audit_sink, fake_client = wired
+    repo.save_booking(BookingRecord(
+        booking_id="b_existing_naive", library_id="lib_demo", room_id="room_a",
+        start=datetime(2026, 10, 1, 10, 30, tzinfo=timezone.utc), end=datetime(2026, 10, 1, 11, 30, tzinfo=timezone.utc),
+        booked_by="patron_existing", booking_type=BookingType.RECURRING_PROGRAM,
+    ))
+    response = client.post(
+        "/api/bookings",
+        json=_body(start="2026-10-01T10:00:00", end="2026-10-01T11:00:00"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] in {"pending_approval", "resolved", "needs_attention"}
+
+
+def test_an_inverted_range_is_rejected_with_422_and_never_invokes_the_agent(wired):
+    # I1 (final review fix round): end before start must never be accepted
+    # -- previously this returned 200/no_conflict and persisted a corrupt
+    # booking.
+    client, repo, audit_sink, fake_client = wired
+    response = client.post(
+        "/api/bookings",
+        json=_body(start="2026-10-01T11:00:00+00:00", end="2026-10-01T10:00:00+00:00"),
+    )
+    assert response.status_code == 422
+    assert fake_client.calls == []
+
+
+def test_the_booking_creation_endpoint_trips_429_once_its_configured_limit_is_exceeded(wired):
+    # I2: mirrors test_cases_write.py's own case-creation rate-limit test
+    # pattern exactly -- this route shares the same dedicated limiter.
+    client, repo, audit_sink, fake_client = wired
+    limiter = RateLimiter(max_requests=2, window_seconds=60)
+    app.dependency_overrides[get_case_creation_rate_limiter] = lambda: limiter
+    try:
+        statuses = [client.post("/api/bookings", json=_body()).status_code for _ in range(3)]
+    finally:
+        app.dependency_overrides.pop(get_case_creation_rate_limiter, None)
+
+    assert statuses == [200, 200, 429]
+
+
+def test_creating_a_booking_without_a_csrf_cookie_or_header_is_rejected(wired):
+    # I2: conftest.py's autouse fixture disables CSRF for every test in
+    # this suite; this re-enables the real check for this one test,
+    # mirroring test_cases_write.py's own pattern for the ILL endpoint.
+    client, repo, audit_sink, fake_client = wired
+    app.dependency_overrides.pop(verify_csrf, None)
+    response = client.post("/api/bookings", json=_body())
+    assert response.status_code == 403
+
+
+def test_two_different_libraries_never_see_each_others_created_bookings(wired):
+    client, repo, audit_sink, fake_client = wired
+    first = client.post("/api/bookings", json=_body(bookedBy="lib_demo_patron"))
+    lib_demo_booking_id = first.json()["bookingId"]
+
+    app.dependency_overrides[get_current_claims] = lambda: StaffIdentityClaims(
+        role="room_booking_staff", library_id="lib_other", case_review_role=None
+    )
+    second = client.get("/api/calendar")
+    assert second.status_code == 200
+    assert all(b["bookingId"] != lib_demo_booking_id for b in second.json())
+
+    app.dependency_overrides[get_current_claims] = lambda: StaffIdentityClaims(
+        role="room_booking_staff", library_id="lib_demo", case_review_role=None
+    )
+    third = client.get("/api/calendar")
+    assert any(b["bookingId"] == lib_demo_booking_id for b in third.json())

@@ -80,6 +80,53 @@ describe("ApprovalQueueProvider / useApprovalQueue", () => {
     expect(screen.getByTestId("resolving")).toHaveTextContent(APPROVAL_CASES_FIXTURE[0].caseId);
   });
 
+  it("discards an older fetch's response that resolves after a newer one, keeping the newer result", async () => {
+    // I3 (final review fix round): the Approvals page's 15-second poll can
+    // race the post-decision refetch a decision's own submit() triggers.
+    // If the OLDER call's promise resolves AFTER the NEWER call's promise,
+    // the newer call's result must still win -- proving the sequence-number
+    // guard, not arrival order, decides what gets applied.
+    let resolveFirst: (cases: typeof APPROVAL_CASES_FIXTURE) => void;
+    let resolveSecond: (cases: typeof APPROVAL_CASES_FIXTURE) => void;
+    const firstPromise = new Promise<typeof APPROVAL_CASES_FIXTURE>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondPromise = new Promise<typeof APPROVAL_CASES_FIXTURE>((resolve) => {
+      resolveSecond = resolve;
+    });
+    vi.mocked(getApprovals).mockReturnValueOnce(firstPromise).mockReturnValueOnce(secondPromise);
+
+    render(
+      <ApprovalQueueProvider>
+        <Probe />
+      </ApprovalQueueProvider>
+    );
+    // The mount effect issues the first call; wait for it to be in flight
+    // before issuing the second (the "newer") call.
+    await waitFor(() => expect(getApprovals).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      screen.getByText("refetch").click();
+    });
+    await waitFor(() => expect(getApprovals).toHaveBeenCalledTimes(2));
+
+    const newerResult = [APPROVAL_CASES_FIXTURE[0]];
+    const olderResult: typeof APPROVAL_CASES_FIXTURE = [];
+
+    // Resolve the NEWER (second) call first, then the OLDER (first) call --
+    // the out-of-order arrival the guard must handle.
+    await act(async () => {
+      resolveSecond!(newerResult);
+    });
+    await waitFor(() => expect(screen.getByTestId("count")).toHaveTextContent(String(newerResult.length)));
+
+    await act(async () => {
+      resolveFirst!(olderResult);
+    });
+    // The stale, later-arriving response from the older call must be
+    // discarded -- the count must still reflect the newer call's result.
+    expect(screen.getByTestId("count")).toHaveTextContent(String(newerResult.length));
+  });
+
   it("throws a clear error when useApprovalQueue is called outside the provider", () => {
     function Bare() {
       useApprovalQueue();

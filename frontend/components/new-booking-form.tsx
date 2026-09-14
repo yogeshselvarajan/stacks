@@ -53,13 +53,15 @@ export function NewBookingForm({ onCreated }: { onCreated?: () => void }) {
         ) : result.status === "pending_approval" ? (
           <p style={{ color: "var(--color-ink)" }}>
             Conflict detected. Stacks needs a human decision before it resolves.{" "}
-            <Link
-              href={`/approvals/${result.conflictingBookingIds?.slice().sort().join(":")}`}
-              className="stacks-focus-ring rounded-sm underline-offset-4 hover:underline"
-              style={{ color: "var(--color-accent)", fontWeight: 600 }}
-            >
-              Review in Approval Inbox
-            </Link>
+            {result.caseId ? (
+              <Link
+                href={`/approvals/${result.caseId}`}
+                className="stacks-focus-ring rounded-sm underline-offset-4 hover:underline"
+                style={{ color: "var(--color-accent)", fontWeight: 600 }}
+              >
+                Review in Approval Inbox
+              </Link>
+            ) : null}
           </p>
         ) : result.status === "resolved" ? (
           <p style={{ color: "var(--color-ink)" }}>Resolved automatically. No human review was needed.</p>

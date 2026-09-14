@@ -9,8 +9,10 @@ from stacks.identity.claims import StaffIdentityClaims
 from stacks.types import SensitivityFlag
 
 from bff.clients.agent_runtime import FakeAgentRuntimeClient
+from bff.csrf import verify_csrf
 from bff.deps import get_agent_runtime_client, get_audit_sink, get_current_claims, get_repo
 from bff.main import app
+from bff.rate_limit import RateLimiter, get_case_creation_rate_limiter
 
 
 @pytest.fixture
@@ -141,3 +143,46 @@ def test_agent_invocation_failure_deletes_the_orphaned_record(monkeypatch, wired
     assert response.json()["status"] == "agent_invocation_failed"
     circulation_record_id = response.json()["circulationRecordId"]
     assert repo.get_circulation_record("lib_demo", circulation_record_id) is None
+
+
+def test_the_overdue_case_creation_endpoint_trips_429_once_its_configured_limit_is_exceeded(wired):
+    # I2: mirrors test_cases_write.py's own case-creation rate-limit test
+    # pattern exactly -- this route shares the same dedicated limiter.
+    client, repo, audit_sink, fake_client = wired
+    limiter = RateLimiter(max_requests=2, window_seconds=60)
+    app.dependency_overrides[get_case_creation_rate_limiter] = lambda: limiter
+    try:
+        statuses = [client.post("/api/overdue-cases", json=_body()).status_code for _ in range(3)]
+    finally:
+        app.dependency_overrides.pop(get_case_creation_rate_limiter, None)
+
+    assert statuses == [200, 200, 429]
+
+
+def test_creating_an_overdue_case_without_a_csrf_cookie_or_header_is_rejected(wired):
+    # I2: conftest.py's autouse fixture disables CSRF for every test in
+    # this suite; this re-enables the real check for this one test,
+    # mirroring test_cases_write.py's own pattern for the ILL endpoint.
+    client, repo, audit_sink, fake_client = wired
+    app.dependency_overrides.pop(verify_csrf, None)
+    response = client.post("/api/overdue-cases", json=_body())
+    assert response.status_code == 403
+
+
+def test_two_different_libraries_never_see_each_others_created_overdue_cases(wired):
+    client, repo, audit_sink, fake_client = wired
+    first = client.post("/api/overdue-cases", json=_body(patronId="lib_demo_patron"))
+    lib_demo_record_id = first.json()["circulationRecordId"]
+
+    app.dependency_overrides[get_current_claims] = lambda: StaffIdentityClaims(
+        role="circulation_staff", library_id="lib_other", case_review_role=None
+    )
+    second = client.get("/api/overdue-queue")
+    assert second.status_code == 200
+    assert all(c["circulationRecordId"] != lib_demo_record_id for c in second.json())
+
+    app.dependency_overrides[get_current_claims] = lambda: StaffIdentityClaims(
+        role="circulation_staff", library_id="lib_demo", case_review_role=None
+    )
+    third = client.get("/api/overdue-queue")
+    assert any(c["circulationRecordId"] == lib_demo_record_id for c in third.json())
