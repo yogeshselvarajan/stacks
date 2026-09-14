@@ -55,7 +55,10 @@ tool's own response. If a commit is blocked pending human approval, say so \
 plainly and stop; do not retry the same commit without a new approval_token. \
 After a successful commit that a workflow requires notifying about, call \
 notify_parties with related_action_id set to the commit result's own \
-related_action_id field. When route_ill_request's evaluate reports \
+related_action_id field, and always also provide a subject and a body \
+summarizing the outcome in plain language for the affected party -- both \
+are required parameters with no default, and a call missing either one \
+fails before it can send anything. When route_ill_request's evaluate reports \
 ambiguity 'multiple_editions', call disambiguate_ill_candidates with that \
 evaluate response's own candidate_matches and requester_pattern before \
 choosing a commit action; if it returns a confident narrowed_candidate_id, \
