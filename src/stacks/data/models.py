@@ -62,6 +62,14 @@ class ILLRequestRecord(BaseModel):
     requester_patron_id: PatronId
     status: ILLRequestStatus = ILLRequestStatus.OPEN
     flags: list[SensitivityFlag] = Field(default_factory=list)
+    # Persisted durably on the request itself (not the ephemeral, in-process
+    # EvaluationCache disambiguate_ill_candidates also writes to) so a
+    # SEPARATE process -- the BFF's read endpoint -- can show the ILL
+    # Disambiguation Specialist's own trace after the agent invocation that
+    # produced it has already ended. See disambiguate_ill_candidates.py.
+    specialist_narrowed_candidate_id: str | None = None
+    specialist_confidence: float | None = None
+    specialist_still_ambiguous: bool | None = None
 
 
 class CatalogCandidate(BaseModel):

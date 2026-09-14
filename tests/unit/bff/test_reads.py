@@ -96,6 +96,51 @@ def test_get_ill_queue_returns_the_seeded_requests_for_the_callers_library(wired
     assert ids == {"ill_unambiguous", "ill_ambiguous", "ill_open_1", "ill_open_2", "ill_open_3"}
     for r in body:
         assert r["tier"] is None  # no pending ill_routing approval seeded in this fixture
+        assert r["specialistTrace"] is None
+        assert r["recallSummary"] is None  # no memory dependency wired in this fixture
+
+
+def test_get_ill_queue_surfaces_the_specialists_persisted_trace(wired_client):
+    from bff.deps import get_repo
+    repo = InMemoryLibraryDataRepository()
+    seed_demo_library(repo, library_id="lib_demo")
+    request = repo.get_ill_request("lib_demo", "ill_ambiguous")
+    request.specialist_narrowed_candidate_id = "hold_2a"
+    request.specialist_confidence = 0.82
+    request.specialist_still_ambiguous = False
+    repo.save_ill_request(request)
+    app.dependency_overrides[get_repo] = lambda: repo
+
+    response = wired_client.get("/api/ill-queue")
+    body = {r["illRequestId"]: r for r in response.json()}
+    assert body["ill_ambiguous"]["specialistTrace"] == {
+        "narrowedCandidateId": "hold_2a", "confidence": 0.82, "stillAmbiguous": False,
+    }
+    assert body["ill_unambiguous"]["specialistTrace"] is None
+
+
+def test_get_ill_queue_and_overdue_queue_surface_real_memory_recall(wired_client):
+    from bff.deps import get_memory
+    from stacks.types import HardshipHistoryFact, RequesterSubstitutionPattern
+
+    class _FakeMemory:
+        def get_ill_substitution_pattern(self, library_id, requester_key):
+            return RequesterSubstitutionPattern(
+                request_frequency=3, subject_areas=["fiction"],
+                has_accepted_substitution_without_escalation=True,
+                last_updated=datetime(2026, 8, 1, tzinfo=timezone.utc),
+            )
+
+        def get_hardship_history(self, library_id, patron_id):
+            return HardshipHistoryFact(flagged_at=datetime(2026, 6, 1, tzinfo=timezone.utc))
+
+    app.dependency_overrides[get_memory] = lambda: _FakeMemory()
+
+    ill_body = wired_client.get("/api/ill-queue").json()
+    assert all("accepted a substitute edition" in r["recallSummary"] for r in ill_body)
+
+    overdue_body = wired_client.get("/api/overdue-queue").json()
+    assert all("Hardship flag on file since 2026-06-01" in c["recallSummary"] for c in overdue_body)
 
 
 def test_get_ill_queue_reports_the_pending_approvals_tier(wired_client):

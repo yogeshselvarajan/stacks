@@ -17,9 +17,33 @@ from stacks.data.repository import LibraryDataRepository
 from stacks.hitl.pending_approvals import PendingApprovalsSink
 from stacks.hooks.audit_log import AuditLogSink
 from stacks.identity.claims import StaffIdentityClaims
+from stacks.memory.store import MemoryStore
 
-from bff.deps import get_audit_sink, get_current_claims, get_pending_approvals_sink, get_repo
+from bff.deps import get_audit_sink, get_current_claims, get_memory, get_pending_approvals_sink, get_repo
 from bff.display_names import item_title, patron_name, room_name
+
+
+def _ill_recall_summary(memory: MemoryStore | None, library_id: str, requester_patron_id: str) -> str | None:
+    if memory is None:
+        return None
+    pattern = memory.get_ill_substitution_pattern(library_id, requester_patron_id)
+    if pattern is None:
+        return None
+    if pattern.has_accepted_substitution_without_escalation:
+        return (
+            f"This requester has accepted a substitute edition without escalating "
+            f"{pattern.request_frequency} prior time(s)."
+        )
+    return f"This requester has made {pattern.request_frequency} prior ILL request(s), no substitution history yet."
+
+
+def _overdue_recall_summary(memory: MemoryStore | None, library_id: str, patron_id: str) -> str | None:
+    if memory is None:
+        return None
+    fact = memory.get_hardship_history(library_id, patron_id)
+    if fact is None:
+        return None
+    return f"Hardship flag on file since {fact.flagged_at.date().isoformat()}."
 
 router = APIRouter()
 
@@ -135,6 +159,7 @@ async def get_ill_queue(
     claims: StaffIdentityClaims = Depends(get_current_claims),
     repo: LibraryDataRepository = Depends(get_repo),
     sink: PendingApprovalsSink = Depends(get_pending_approvals_sink),
+    memory: MemoryStore | None = Depends(get_memory),
 ) -> list[dict]:
     requests = await run_in_threadpool(repo.list_ill_requests, claims.library_id)
     pending = await run_in_threadpool(sink.list_for_library, claims.library_id)
@@ -150,14 +175,21 @@ async def get_ill_queue(
             # matches ApprovalCase's own tier source (the PendingApprovals
             # sink), never re-classified independently here.
             "tier": pending_tier_by_case.get(r.ill_request_id),
-            # specialistTrace/recallSummary are optional on IllRequest and
-            # need the ILL Disambiguation Specialist's own cache / a real
-            # AgentCore Memory lookup respectively -- neither is wired
-            # into this read endpoint (no memory/disambiguation_cache
-            # dependency exists in the BFF), a named scope decision, not
-            # a silent gap.
-            "specialistTrace": None,
-            "recallSummary": None,
+            # Read from the ILL request's own durable record -- persisted
+            # there by disambiguate_ill_candidates.py precisely so this
+            # SEPARATE process (a BFF read, long after the agent
+            # invocation that produced it has ended) can see it. None
+            # when the specialist was never invoked for this request.
+            "specialistTrace": (
+                {
+                    "narrowedCandidateId": r.specialist_narrowed_candidate_id,
+                    "confidence": r.specialist_confidence,
+                    "stillAmbiguous": r.specialist_still_ambiguous,
+                }
+                if r.specialist_confidence is not None
+                else None
+            ),
+            "recallSummary": await run_in_threadpool(_ill_recall_summary, memory, claims.library_id, r.requester_patron_id),
         }
         for r in requests
     ]
@@ -189,6 +221,7 @@ async def get_overdue_queue(
     claims: StaffIdentityClaims = Depends(get_current_claims),
     repo: LibraryDataRepository = Depends(get_repo),
     sink: PendingApprovalsSink = Depends(get_pending_approvals_sink),
+    memory: MemoryStore | None = Depends(get_memory),
 ) -> list[dict]:
     records = await run_in_threadpool(repo.list_circulation_records, claims.library_id)
     pending = await run_in_threadpool(sink.list_for_library, claims.library_id)
@@ -207,10 +240,7 @@ async def get_overdue_queue(
             "patronName": patron_name(record.patron_id),
             "itemTitle": item_title(record.item_id),
             "tierHistory": _tier_history_for_record(record, pending_case_ids),
-            # recallSummary needs a real AgentCore Memory lookup, not
-            # wired into this read endpoint -- named scope decision,
-            # mirrors the same call made for ill-queue above.
-            "recallSummary": None,
+            "recallSummary": await run_in_threadpool(_overdue_recall_summary, memory, claims.library_id, record.patron_id),
         })
     return cases
 

@@ -137,6 +137,17 @@ def make_disambiguate_ill_candidates(
 
         disambiguation_cache.put(library_id, ill_request_id, result.model_dump(mode="json"))
 
+        # Also persist onto the request's own durable record (unlike the
+        # cache above, this survives past this process) so the BFF's read
+        # endpoint -- a SEPARATE process, invoked long after this agent
+        # invocation ends -- can show the specialist's trace at all.
+        request = repo.get_ill_request(library_id, ill_request_id)
+        if request is not None:
+            request.specialist_narrowed_candidate_id = result.narrowed_candidate_id
+            request.specialist_confidence = result.confidence
+            request.specialist_still_ambiguous = result.still_ambiguous
+            repo.save_ill_request(request)
+
         return {"status": "success", "content": [{"json": result.model_dump(mode="json")}]}
 
     return disambiguate_ill_candidates

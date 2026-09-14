@@ -17,10 +17,13 @@ from stacks.hooks.audit_log import AuditLogSink
 from stacks.hooks.dynamodb_audit_log import DynamoDBAuditLogSink
 from stacks.identity.claims import InvalidClaimsError, StaffIdentityClaims
 from stacks.identity.cognito_verifier import CognitoClaimsVerifier
+from stacks.memory.agentcore_store import AgentCoreMemoryStore
+from stacks.memory.store import MemoryStore
 
 from bff.clients.agent_runtime import AgentRuntimeClient, BedrockAgentCoreRuntimeClient
 from bff.config import (
     AGENT_RUNTIME_ARN,
+    AGENTCORE_MEMORY_ID,
     COGNITO_APP_CLIENT_ID,
     COGNITO_USER_POOL_ID,
     ENVIRONMENT,
@@ -33,6 +36,8 @@ _repo: LibraryDataRepository | None = None
 _pending_approvals_sink: PendingApprovalsSink | None = None
 _audit_sink: AuditLogSink | None = None
 _agent_runtime_client: AgentRuntimeClient | None = None
+_memory: MemoryStore | None = None
+_memory_initialized = False
 
 
 def _get_verifier() -> CognitoClaimsVerifier:
@@ -56,6 +61,18 @@ def get_repo() -> LibraryDataRepository:
     if _repo is None:
         _repo = DynamoDBLibraryDataRepository(region=REGION, environment=ENVIRONMENT)
     return _repo
+
+
+def get_memory() -> MemoryStore | None:
+    """Real AgentCore Memory when STACKS_AGENTCORE_MEMORY_ID is configured,
+    None otherwise (fail-open: read endpoints show no recallSummary rather
+    than erroring, matching main.py's own memory-optional convention).
+    """
+    global _memory, _memory_initialized
+    if not _memory_initialized:
+        _memory = AgentCoreMemoryStore(memory_id=AGENTCORE_MEMORY_ID, region=REGION) if AGENTCORE_MEMORY_ID else None
+        _memory_initialized = True
+    return _memory
 
 
 def get_pending_approvals_sink() -> PendingApprovalsSink:
