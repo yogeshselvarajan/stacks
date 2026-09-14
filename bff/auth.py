@@ -8,7 +8,9 @@ claim reads.
 """
 from __future__ import annotations
 
+import os
 import re
+from typing import Literal
 
 import boto3
 from botocore.exceptions import ClientError
@@ -25,17 +27,26 @@ from fastapi import Depends
 
 router = APIRouter()
 
+# "Strict" by default (the original design, local dev, and any deployment
+# where the frontend and BFF share a domain). Set STACKS_COOKIE_SAMESITE=None
+# when they are on different domains, e.g. the frontend on Amplify Hosting
+# and the BFF on a separate Lambda Function URL -- a Strict cookie would
+# never be sent on that cross-site fetch at all. The double-submit CSRF
+# cookie (bff/csrf.py) remains the primary, independent defense either way,
+# so this is a deliberate, explained trade-off, not a silent weakening.
+_SAMESITE: Literal["Strict", "Lax", "None"] = os.environ.get("STACKS_COOKIE_SAMESITE", "Strict")  # type: ignore[assignment]
+
 
 def _set_session_cookies(response: Response, id_token: str, expires_in: int) -> None:
     response.set_cookie(
         key=SESSION_COOKIE_NAME, value=id_token, httponly=True, secure=True,
-        samesite="Strict", max_age=expires_in,
+        samesite=_SAMESITE, max_age=expires_in,
     )
     # Not HttpOnly: the frontend must be able to read this value in order
     # to echo it back as the X-Stacks-CSRF-Token header (bff/csrf.py).
     response.set_cookie(
         key=CSRF_COOKIE_NAME, value=generate_csrf_token(), httponly=False, secure=True,
-        samesite="Strict", max_age=expires_in,
+        samesite=_SAMESITE, max_age=expires_in,
     )
 
 # Self-service sign-up is scoped to this project's own single demo tenant
