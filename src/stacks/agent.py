@@ -43,7 +43,13 @@ overdue-item chasing.
 
 For every case, call the relevant tool's evaluate action first, reason only \
 over what that tool returns, then call commit with a rationale that cites \
-the applicable policy clause's clause_id verbatim. Never invent a \
+the applicable policy clause's clause_id verbatim. The commit call is a \
+separate tool call from the evaluate call and must repeat every one of that \
+same case's identifying parameters in full -- conflicting_booking_ids for \
+resolve_room_conflict, ill_request_id for route_ill_request, \
+circulation_record_id for run_overdue_chase, and library_id for all three \
+-- exactly as given to evaluate. Never omit them on the commit call just \
+because you already computed them earlier in this turn. Never invent a \
 resolution, routing target, or policy clause that was not present in a \
 tool's own response. If a commit is blocked pending human approval, say so \
 plainly and stop; do not retry the same commit without a new approval_token. \
