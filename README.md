@@ -8,7 +8,9 @@ A task completion agent for library operations, built with the Strands Agents SD
 
 ## About this submission
 
-This is a solo entry in the [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/) (Amazon Web Services, hosted on Devpost, submission period ended September 14, 2026), in the **Good Neighbor Agents** track: agents that help groups of people, not just one, for neighborhoods, nonprofits, schools, and libraries. The hackathon's brief was to build a new AI agent with the Strands Agents SDK that takes on a real, repetitive task and handles it end to end, rather than just chatting about it. If you are a judge or a first time visitor, the short version of what to look at is: `docs/architecture/final_architecture.md` for how it is built, `docs/product/final_product_spec.md` for what it does and why, and the "Running it locally" section below to try it yourself.
+This is a solo entry in the [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/) (Amazon Web Services, hosted on Devpost, submission period ended September 14, 2026), in the **Good Neighbor Agents** track: agents that help groups of people, not just one, for neighborhoods, nonprofits, schools, and libraries. The hackathon's brief was to build a new AI agent with the Strands Agents SDK that takes on a real, repetitive task and handles it end to end, rather than just chatting about it. If you are a judge or a first time visitor, the short version of what to look at is: `docs/architecture/final_architecture.md` for how it is built, `docs/product/final_product_spec.md` for what it does and why, and the live demo link below to try it yourself.
+
+**Live demo: [main.d1f4dnxaaugevn.amplifyapp.com](https://main.d1f4dnxaaugevn.amplifyapp.com/login)**. Click "Continue as Hackathon Judge" on the Sign In page for one click, no password access with full real permissions against the real deployed AWS backend (Cognito, DynamoDB, Bedrock AgentCore Runtime, AgentCore Memory, Bedrock Guardrails). No credentials ever leave the server.
 
 ## The problem
 
