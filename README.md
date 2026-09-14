@@ -1,135 +1,135 @@
 # Stacks
 
-A task completion agent for library operations, built with the Strands Agents SDK and deployed on Amazon Bedrock AgentCore.
+### Your systems handle the routine. Stacks works what they leave behind.
+
+A task-completion agent for library operations, built with the Strands Agents SDK and deployed on Amazon Bedrock AgentCore.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Built with Strands Agents SDK](https://img.shields.io/badge/Built%20with-Strands%20Agents%20SDK-blue)](https://strandsagents.com/)
 [![Deployed on Amazon Bedrock AgentCore](https://img.shields.io/badge/Deployed%20on-Amazon%20Bedrock%20AgentCore-orange)](https://aws.amazon.com/bedrock/agentcore/)
 
-## About this submission
+## Try Stacks
 
-This is a solo entry in the [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/) (Amazon Web Services, hosted on Devpost, submission period ended September 14, 2026), in the **Good Neighbor Agents** track: agents that help groups of people, not just one, for neighborhoods, nonprofits, schools, and libraries. The hackathon's brief was to build a new AI agent with the Strands Agents SDK that takes on a real, repetitive task and handles it end to end, rather than just chatting about it. If you are a judge or a first time visitor, the short version of what to look at is: `docs/architecture/final_architecture.md` for how it is built, `docs/product/final_product_spec.md` for what it does and why, and the live demo link below to try it yourself.
+**Live demo: https://main.d1f4dnxaaugevn.amplifyapp.com/**
 
-**Live demo: [main.d1f4dnxaaugevn.amplifyapp.com](https://main.d1f4dnxaaugevn.amplifyapp.com/login)**. Click "Continue as Hackathon Judge" on the Sign In page for one click, no password access with full real permissions against the real deployed AWS backend (Cognito, DynamoDB, Bedrock AgentCore Runtime, AgentCore Memory, Bedrock Guardrails). No credentials ever leave the server.
+Open the site, click **Sign In**, choose the **Hackathon Judges** tab, then **Continue as Hackathon Judge**. One click, no password, full real permissions against the real deployed AWS backend. No credentials ever leave the server.
+
+**Demo environment, synthetic library workflow data.** The infrastructure and agent execution are real (real Cognito, real DynamoDB, real Bedrock AgentCore Runtime, real AgentCore Memory, real Bedrock Guardrails). The room bookings, ILL requests, and patron records the demo runs against are a seeded synthetic dataset, not a real library's live data.
+
+---
+
+## What is Stacks?
+
+Stacks works the exception queue that traditional library automation creates and then hands back to staff.
+
+```mermaid
+flowchart TD
+    A[Case] --> B[Context]
+    B --> C[Policy]
+    C --> D[Safety]
+    D -->|GREEN| E[Resolve]
+    D -->|YELLOW or RED| F[Human approval]
+    F --> E
+    E --> G[Audit]
+```
+
+It handles three real workflows end to end:
+
+- **Room-booking conflicts**: resolves them against a library's stated priority policy
+- **Ambiguous interlibrary-loan requests**: a dedicated specialist agent narrows down multiple candidate editions
+- **Overdue-item escalation**: a durable, multi-day escalation sequence that stays context-aware of patron circumstance
+
+It resolves the cases it can safely resolve, prepares the ones that need a second opinion, and stops for a human exactly when judgment is required.
 
 ## The problem
 
-Libraries have already automated the easy, rule following part of room booking, interlibrary loan (ILL) requests, and overdue item chasing. The moment a case needs judgment instead of a fixed rule, it silently falls back to a human, right at the point where library staff have the least capacity to absorb it. A double booked community room, an ambiguous ILL request with two possible editions, an overdue notice that needs a different tone for a patron with a documented hardship flag: none of this is handled by the scheduling or circulation software libraries already run.
+Libraries already have mature automation for predictable work: LibCal blocks an obviously double-booked slot, ILLiad auto-routes the routine borrow, an ILS fires a templated overdue notice on a fixed schedule. What none of that automation does is resolve the conflict that occurs anyway, route the genuinely ambiguous request, or differentiate an overdue response by patron circumstance. That remainder becomes a human review queue, at exactly the point where library staff have the least capacity to absorb it.
 
-## Who it is for
+A concrete case: an interlibrary-loan request comes in for a title with two different editions available and no indication which one the patron wants. Existing systems can detect that ambiguity. They can't resolve it. Stacks does.
 
-Library staff, most directly a branch manager or circulation, room booking, and ILL coordinator staff, who currently resolve these judgment calls by hand, one case at a time, with no institutional memory carried between them.
+## Who it's for
 
-## What Stacks does
+Branch managers, circulation staff, room-booking staff, and ILL coordinators: the people who manage operational exceptions once existing library systems have already flagged them.
 
-Stacks is a real staff facing web application backed by a Strands agent system that:
+## What Stacks does differently
 
-- Resolves room booking conflicts against a stated priority policy
-- Routes ambiguous interlibrary loan requests, including a dedicated ILL Disambiguation Specialist that narrows down multiple candidate editions
-- Runs context aware overdue item chasing through a durable, multi day escalation sequence
-- Keeps a human in the loop exactly when a case is sensitive or ambiguous enough to need one, gated by a code governed safety classifier, never a model's own judgment call
-- Remembers real institutional context across sessions (a requester's past substitution pattern, a patron's hardship flag) using Amazon Bedrock AgentCore Memory
-- Logs a full, durable audit trail of every action the agent takes, for the people supervising it
+**Traditional automation:** Detect, Rule, Route, Human queue.
 
-Why an agent instead of another rule engine: the same three workflows already have deterministic tooling (Springshare LibCal, OCLC ILLiad and Tipasa, standard ILS overdue modules). What none of that tooling does is resolve a conflict, narrow an ambiguous request, or differentiate a response by patron circumstance. That is exactly the judgment gap Stacks targets, with a human approving every sensitive decision rather than the agent acting alone.
+**Stacks:** Case, Context, Policy, Specialist, Safety, then Resolve or human approval.
+
+Stacks targets a different part of the workflow: the ambiguous exception case that traditional automation sends back to staff, not the deterministic routing traditional automation already does well.
+
+**Agent, not chatbot.** A chatbot answers a question. Stacks decides, acts, and produces an outcome. Chatbot: Question, then Answer. Stacks: Case, Decision, Action, Outcome.
+
+## Human in the loop, by design
+
+Every action is classified **GREEN**, **YELLOW**, or **RED**:
+
+- **GREEN**: safe to automate, resolved without a human
+- **YELLOW**: prepared and correct, waiting for a staff member to confirm
+- **RED**: a human makes the decision, not the agent
+
+**The model never decides its own safety tier.** The classifier is a plain, code-governed function, not a prompt, so the agent cannot reason its way into skipping a human. Stacks evaluates each case against the library's own written policy and records the exact clause the decision cites. Every meaningful action is written to a durable audit trail: the case, the action taken, its tier, the result, and when it happened.
+
+AgentCore Memory lets Stacks recall relevant prior context across sessions, a requester's past substitution pattern, a documented patron hardship flag, so a decision made today is informed by what actually happened before, not a blank slate every time.
+
+## Judge quick start
+
+1. Open the live demo, click **Sign In**, then **Continue as Hackathon Judge**
+2. Open **Approval Inbox** and review a pending case, including the policy clause it cites
+3. Approve it, then open **Audit Trail** to see the recorded action
+4. Try the **ILL Queue**: submit a new request and watch it route or escalate
+5. Try the **Overdue Queue** and **Calendar** views for the other two workflows
+
+A judge should never need curl, the AWS CLI, or any developer tooling to experience the product. The hosted demo is the primary way to try Stacks.
+
+## Built on AWS
+
+| Service | Role |
+|---|---|
+| Amazon Bedrock | Foundation model inference (Amazon Nova Lite) |
+| Bedrock AgentCore Runtime | Hosts and executes the agent |
+| AgentCore Memory | Cross-session contextual recall |
+| Bedrock Guardrails | Output content safety |
+| Amazon Cognito | Staff authentication and role groups |
+| Amazon DynamoDB | Operational state and the audit trail |
+| Amazon S3 | Agent session state |
+| Amazon EventBridge | Scheduled nightly overdue processing |
+| AWS Lambda | BFF compute and the EventBridge-to-runtime shim |
+| AWS Amplify Hosting | The staff web application |
 
 ## How it works
 
 ```mermaid
-flowchart TB
-    subgraph INPUT["User Input / Interface"]
-        UI["Next.js staff web app\nlogin, case and approval queue, calendar/ILL/circulation views, audit trail"]
-        SCHED["EventBridge scheduled rule\nnightly overdue sweep"]
-    end
-
-    subgraph AUTH["Identity"]
-        COGNITO["Amazon Cognito\nstaff role groups + library_id + case review claim"]
-    end
-
-    subgraph BFFLAYER["Python BFF (FastAPI)"]
-        BFF["Backend for frontend\nverifies JWT, read views query DynamoDB directly, agent actions call AgentCore Runtime"]
-    end
-
-    subgraph AGENT["Strands Agent"]
-        LOOP["Stacks Agent (single top level Agent)\nmodel, tools, reasoning, response"]
-        ILLSPEC["ILL Disambiguation Specialist\nAgents as Tools, second Agent narrowing candidates"]
-        WF["Overdue Escalation Sequencer\nsession per case, nightly EventBridge trigger"]
-        HOOKS["Hooks\ncode governed HITL classifier, unconditional audit log, memory write"]
-    end
-
-    subgraph TOOLS["Tools"]
-        T1["get_library_data"]
-        T2["resolve_room_conflict"]
-        T3["route_ill_request"]
-        T4["run_overdue_chase"]
-        T5["notify_parties"]
-        T6["search_ill_catalog_candidates"]
-    end
-
-    subgraph AWSSVC["AWS services"]
-        BEDROCK["Amazon Bedrock\nfoundation model + Guardrails"]
-        RUNTIME["AgentCore Runtime"]
-        MEMORY[("AgentCore Memory\nrepeat ILL requester pattern, patron hardship history")]
-        DDB[("DynamoDB, 8 tables")]
-        S3[("S3\nsession state")]
-    end
-
-    subgraph HUMAN["Human in the loop"]
-        STAFF["Logged in staff member\napproves or declines by role and tier"]
-    end
-
-    UI --> COGNITO --> BFF
-    BFF -. "read views" .-> DDB
-    BFF -- "agent actions" --> RUNTIME
-    SCHED --> RUNTIME
-    RUNTIME --> LOOP
-    LOOP <--> BEDROCK
-    LOOP --> T1 & T2 & T3 & T5
-    LOOP -. "ambiguous ILL case" .-> ILLSPEC
-    ILLSPEC --> T6
-    LOOP -. "scheduled overdue case" .-> WF
-    WF --> T4
-    T1 & T2 & T3 & T4 --> DDB
-    LOOP -. "recall + write" .-> MEMORY
-    LOOP --> HOOKS
-    HOOKS -. "sensitive case" .-> BFF
-    BFF -. "surfaces in the queue" .-> UI
-    STAFF -. "approve or decline" .-> BFF
-    RUNTIME --> S3
+flowchart LR
+    U[Staff or Judge] --> S[Stacks Web App]
+    S --> B[BFF]
+    B --> R[AgentCore Runtime]
+    R --> AG[Strands Agent]
+    AG --> SA[Safety Classifier]
+    SA -->|GREEN| AC[Action]
+    SA -->|YELLOW or RED| HU[Human Approval]
+    HU --> AC
+    AC --> AU[Audit Trail]
 ```
 
-A full, kept up to date architecture writeup lives in [`docs/architecture/final_architecture.md`](docs/architecture/final_architecture.md), including the human in the loop safety classification table and the exact reasoning behind every AWS service used.
+## Security boundaries
 
-## Built on AWS
-
-- Amazon Bedrock, foundation model inference (Amazon Nova Lite)
-- Amazon Bedrock AgentCore Runtime, hosting the agent
-- Amazon Bedrock AgentCore Memory, cross session institutional recall
-- Amazon Bedrock Guardrails, output content safety
-- Amazon Cognito, staff authentication and role groups
-- Amazon DynamoDB, the library operations dataset and audit log
-- Amazon S3, agent session state
-- Amazon EventBridge, the nightly overdue sweep trigger
-- AWS Lambda, the EventBridge to AgentCore Runtime shim
-
-## Human in the loop, by design
-
-Every action the agent takes is classified GREEN, YELLOW, or RED by a plain, code governed function, never by asking the model to judge its own case. GREEN commits on its own. YELLOW and RED pause and wait for a real staff member with the right role to approve, edit, or decline before anything happens. The classifier and the approval check are treated as the most safety critical code in the project and are covered by their own dedicated tests.
+Cognito-verified identity on every request, tenant-scoped identity, role-based permissions enforced server-side rather than only hidden in the UI, the GREEN/YELLOW/RED safety tier enforced in code rather than by the model, and a durable audit trail of every mutating action.
 
 ## Repository layout
 
 ```
-src/stacks/          the agent, its tools, HITL classifier, memory, and identity code
-bff/                  the FastAPI backend for frontend the web app talks to
-frontend/             the Next.js staff web app
-main.py               the AgentCore Runtime entrypoint
-infra/                Terraform for the real AWS infrastructure
-scripts/               one off provisioning and deployment scripts
-tests/                 unit and integration tests
-docs/                  the full research, architecture, product, and evaluation trail
+src/stacks/   the Strands agent, its domain tools, and the HITL classifier
+bff/          the FastAPI backend the web app talks to
+frontend/     the Next.js staff web application
+infra/        Terraform for the real AWS infrastructure
+tests/        unit, integration, and adversarial tests
+docs/         product, architecture, evaluation, and research documentation
+scripts/      provisioning and deployment scripts
 ```
 
-## Running it locally
+## Run it locally
 
 This project talks to real AWS services (Cognito, DynamoDB, Bedrock, AgentCore Runtime). There is no fully offline mode for the web app, though the unit test suite runs with no AWS credentials at all.
 
@@ -162,7 +162,7 @@ npm run dev
 
 Set `NEXT_PUBLIC_BFF_BASE_URL` to point the frontend at the BFF above.
 
-### Deploying the agent itself to a real AgentCore Runtime
+### Deploying the agent to a real AgentCore Runtime
 
 ```bash
 python scripts/build_deployment_package.py
@@ -172,14 +172,28 @@ python scripts/update_agent_runtime.py
 
 The real AWS infrastructure (DynamoDB tables, IAM roles, the EventBridge schedule, the Bedrock Guardrail) is defined in `infra/` as Terraform.
 
-## Testing
+## Current limitations
 
-The test suite covers unit tests for every tool and the HITL classifier, integration tests against a real Strands `Agent` instance, and a set of adversarial and prompt injection scenarios run against the real deployed model. Safety critical checks (does a sensitive case actually stop for a human, does the classifier ever fail open) have a zero tolerance bar, documented in `docs/evaluation/evaluation_plan.md`.
+- Runs against a synthetic library dataset, not a live catalog
+- No live integration with OCLC/Tipasa, LibCal, or Alma yet
+- Validated against synthetic test scenarios; pilot validation with practicing librarians is future work
+
+## What's next
+
+- Real OCLC/WorldShare and LibCal integrations
+- Institution-specific policy configuration
+- A real library pilot
+- First-class, separately queryable approval audit events
+
+## Built for Agents for Humans
+
+Stacks was built for the [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/) (Amazon Web Services, hosted on Devpost), in the **Good Neighbor Agents** track, using the Strands Agents SDK and AWS services.
+
+## Author
+
+**Yogesh Selvarajan**
+[LinkedIn](https://www.linkedin.com/in/yogesh-selvarajan/) · [AWS Builder Center](https://builder.aws.com/community/@yogeshs)
 
 ## License
 
 MIT, see [LICENSE](LICENSE).
-
-## Acknowledgments
-
-Built with the [Strands Agents SDK](https://strandsagents.com/) for the Agents for Humans Hackathon, sponsored by AWS.
