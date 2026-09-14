@@ -24,19 +24,34 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
 ];
 
+// Home is always visible for every role (handled separately, rendered
+// outside NAV_GROUPS). Audit Trail is visible to every role since it's
+// read-only evidence, not a write surface, per this plan's own Preamble.
+const ROLE_VISIBLE_ROUTES: Record<Role, string[]> = {
+  branch_manager: ["/approvals", "/calendar", "/ill-queue", "/overdue-queue", "/audit"],
+  room_booking_staff: ["/calendar", "/audit"],
+  ill_coordinator: ["/ill-queue", "/audit"],
+  circulation_staff: ["/overdue-queue", "/audit"],
+};
+
 export function AppShell({
   role,
   tenantName,
   pendingCounts,
   activeRoute,
+  caseReviewRole,
   children,
 }: {
   role: Role;
   tenantName: string;
   pendingCounts: { approvals: number };
   activeRoute: string;
+  caseReviewRole: string | null;
   children: React.ReactNode;
 }) {
+  const visibleHrefs = new Set(ROLE_VISIBLE_ROUTES[role]);
+  if (caseReviewRole) visibleHrefs.add("/approvals");
+
   return (
     <div className="flex min-h-screen" style={{ background: "var(--color-bg)" }}>
       <nav
@@ -71,7 +86,10 @@ export function AppShell({
           </li>
         </ul>
 
-        {NAV_GROUPS.map((group) => (
+        {NAV_GROUPS.map((group) => {
+          const visibleItems = group.items.filter((item) => visibleHrefs.has(item.href));
+          if (visibleItems.length === 0) return null;
+          return (
           <div key={group.label} className="mb-4">
             <p
               className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wide"
@@ -80,7 +98,7 @@ export function AppShell({
               {group.label}
             </p>
             <ul className="space-y-0.5">
-              {group.items.map(({ href, label, Icon, countKey }) => {
+              {visibleItems.map(({ href, label, Icon, countKey }) => {
                 const count = countKey ? pendingCounts[countKey] : 0;
                 const active = activeRoute === href;
                 return (
@@ -116,7 +134,8 @@ export function AppShell({
               })}
             </ul>
           </div>
-        ))}
+          );
+        })}
 
         <div className="mt-2 border-t pt-3" style={{ borderColor: "var(--color-border)" }}>
           <p className="mb-2 flex items-center gap-1.5 px-1 text-xs" style={{ color: "var(--color-ink-faint)" }}>
