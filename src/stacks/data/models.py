@@ -7,7 +7,7 @@ ILLQueueResult.ILLRequestRecord, CirculationRecordResult.CirculationRecord).
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
@@ -60,6 +60,13 @@ class ILLRequestRecord(BaseModel):
     requested_title: str
     requested_edition_hint: str | None = None
     requester_patron_id: PatronId
+    # Real ILL systems (ILLiad-derived conventions, confirmed via web
+    # research) track the request-sent date as prominently as the
+    # requester -- this is the field that was missing entirely before,
+    # not just unsurfaced. Defaults to "now" so every request ever
+    # created, including through the live agent tool, has one; the demo
+    # fixtures below set explicit values instead for a staggered look.
+    requested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status: ILLRequestStatus = ILLRequestStatus.OPEN
     flags: list[SensitivityFlag] = Field(default_factory=list)
     # Persisted durably on the request itself (not the ephemeral, in-process

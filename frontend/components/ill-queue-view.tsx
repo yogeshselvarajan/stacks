@@ -27,6 +27,12 @@ const EXPAND_TRIGGER_CLASS =
   "stacks-focus-ring flex w-full items-center gap-1.5 rounded px-1 py-1 text-left transition-all hover:brightness-90 active:brightness-95";
 const EXPAND_DISABLED_CLASS = "flex items-center gap-1.5 px-1 py-1 opacity-60";
 
+function formatRequestedDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
 const STATUS_LABELS: Record<IllRequest["status"], string> = {
   open: "Open",
   routed: "Routed",
@@ -71,14 +77,16 @@ export function IllQueueView({ requests, status }: { requests: IllRequest[]; sta
       <thead>
         <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
           <th className="px-4 py-2 text-left" style={{ color: "var(--color-ink-muted)" }}>Title</th>
+          <th className="px-4 py-2 text-left" style={{ color: "var(--color-ink-muted)" }}>Requester</th>
+          <th className="px-4 py-2 text-left" style={{ color: "var(--color-ink-muted)" }}>Requested</th>
           <th className="px-4 py-2 text-left" style={{ color: "var(--color-ink-muted)" }}>Status</th>
         </tr>
       </thead>
       <tbody>
-        {status === "loading" && Array.from({ length: 3 }).map((_, i) => <RowSkeleton key={i} columns={2} />)}
+        {status === "loading" && Array.from({ length: 3 }).map((_, i) => <RowSkeleton key={i} columns={4} />)}
         {status === "ready" && requests.length === 0 && (
           <tr>
-            <td colSpan={2} className="px-4 py-6 text-center" style={{ color: "var(--color-ink-muted)" }}>
+            <td colSpan={4} className="px-4 py-6 text-center" style={{ color: "var(--color-ink-muted)" }}>
               No ILL requests match the current filter. Try a different status.
             </td>
           </tr>
@@ -120,6 +128,10 @@ export function IllQueueView({ requests, status }: { requests: IllRequest[]; sta
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-2" style={{ color: "var(--color-ink)" }}>{r.requesterName}</td>
+                  <td className="px-4 py-2" style={{ fontVariantNumeric: "tabular-nums", color: "var(--color-ink-muted)" }}>
+                    {formatRequestedDate(r.requestedAt)}
+                  </td>
                   <td className="px-4 py-2">
                     {r.tier ? (
                       <TierBadge tier={r.tier} />
@@ -133,7 +145,7 @@ export function IllQueueView({ requests, status }: { requests: IllRequest[]; sta
                 </tr>
                 {isExpanded && r.specialistTrace && (
                   <tr id={detailId}>
-                    <td colSpan={2} className="px-4 py-3" style={{ background: "var(--color-surface-2)" }}>
+                    <td colSpan={4} className="px-4 py-3" style={{ background: "var(--color-surface-2)" }}>
                       {/* frontend_architecture.md section 7.5: the specialist's own
                           reasoning trace is a distinctly labeled block, never folded
                           silently into a top-level rationale. */}

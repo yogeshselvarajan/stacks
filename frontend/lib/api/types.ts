@@ -29,6 +29,8 @@ export interface CalendarBooking {
 export interface IllRequest {
   illRequestId: string;
   requestedTitle: string;
+  requesterName: string;
+  requestedAt: string;
   status: "open" | "routed" | "no_match";
   tier: Tier | null;
   specialistTrace?: { narrowedCandidateId: string | null; confidence: number | null; stillAmbiguous: boolean };

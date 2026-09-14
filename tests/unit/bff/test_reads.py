@@ -142,6 +142,20 @@ def test_get_ill_queue_returns_the_seeded_requests_for_the_callers_library(wired
         assert r["recallSummary"] is None  # no memory dependency wired in this fixture
 
 
+def test_get_ill_queue_surfaces_the_requesters_real_name_and_request_date(wired_client):
+    response = wired_client.get("/api/ill-queue")
+    body = {r["illRequestId"]: r for r in response.json()}
+    # patron_ill_1 is the seeded requester on ill_unambiguous (fixtures.py)
+    # -- must resolve through bff/display_names.py, the same convention
+    # already used for room/patron names elsewhere, never the raw id.
+    assert body["ill_unambiguous"]["requesterName"] == "Devi Kapoor"
+    assert body["ill_unambiguous"]["requesterName"] != "patron_ill_1"
+    # requestedAt is a real ISO timestamp on every seeded request, not an
+    # optional/omitted field -- the fixture seeds a fixed, distinct date
+    # per request so the queue reads as staggered real activity.
+    assert body["ill_unambiguous"]["requestedAt"] == "2026-08-20T09:00:00+00:00"
+
+
 def test_get_ill_queue_surfaces_the_specialists_persisted_trace(wired_client):
     from bff.deps import get_repo
     repo = InMemoryLibraryDataRepository()

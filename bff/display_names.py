@@ -25,6 +25,11 @@ _PATRON_NAMES: dict[str, str] = {
     "patron_overdue_2": "James Okafor",
     "patron_overdue_3": "Priya Nair",
     "patron_overdue_4": "Sam Whitfield",
+    "patron_ill_1": "Devi Kapoor",
+    "patron_ill_2": "Marcus Lindqvist",
+    "patron_ill_3": "Aaliyah Robinson",
+    "patron_ill_4": "Tom Sackville",
+    "patron_ill_5": "Fatima Idris",
     # Plan 3's real, currently-running Overdue Sequencer soak test writes
     # this record directly to DynamoDB (scripts/seed_overdue_soak_case.py)
     # -- named honestly here rather than given a fake patron name, so it

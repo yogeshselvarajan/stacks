@@ -18,6 +18,13 @@ describe("IllQueueView", () => {
     expect(screen.getByText("hold_2a")).toBeInTheDocument();
   });
 
+  it("populated state: shows the requester's real name and a formatted request date, never the raw patron id or ISO string", () => {
+    render(<IllQueueView requests={ILL_QUEUE_FIXTURE} status="ready" />);
+    expect(screen.getByText("Devi Kapoor")).toBeInTheDocument();
+    expect(screen.getByText("Aug 20, 2026")).toBeInTheDocument();
+    expect(screen.queryByText("2026-08-20T09:00:00+00:00")).not.toBeInTheDocument();
+  });
+
   it("empty state: names the filter as why nothing shows", () => {
     render(<IllQueueView requests={[]} status="ready" />);
     expect(screen.getByText(/no ill requests match/i)).toBeInTheDocument();
@@ -55,6 +62,8 @@ describe("IllQueueView", () => {
       {
         illRequestId: "ill_req_999",
         requestedTitle: "Kindred",
+        requesterName: "Octavia Brooks",
+        requestedAt: "2026-08-15T12:00:00+00:00",
         status: "open",
         tier: "YELLOW",
         specialistTrace: { narrowedCandidateId: "hold_9z", confidence: 0.5, stillAmbiguous: false },
@@ -84,7 +93,11 @@ describe("IllQueueView", () => {
 
   it("expand trigger: a request with no specialist trace renders a disabled, non-interactive row (no button)", () => {
     const noTrace: IllRequest[] = [
-      { illRequestId: "ill_req_no_trace", requestedTitle: "Unrouted Title", status: "no_match", tier: null },
+      {
+        illRequestId: "ill_req_no_trace", requestedTitle: "Unrouted Title",
+        requesterName: "Priya Nair", requestedAt: "2026-08-10T08:00:00+00:00",
+        status: "no_match", tier: null,
+      },
     ];
     render(<IllQueueView requests={noTrace} status="ready" />);
     expect(screen.queryByRole("button", { name: /unrouted title/i })).toBeNull();

@@ -184,6 +184,8 @@ async def get_ill_queue(
         {
             "illRequestId": r.ill_request_id,
             "requestedTitle": r.requested_title,
+            "requesterName": patron_name(r.requester_patron_id),
+            "requestedAt": r.requested_at.isoformat(),
             "status": r.status.value,
             # None when there is no open pending-approval case for this
             # request (either already routed/no_match, or GREEN-classified

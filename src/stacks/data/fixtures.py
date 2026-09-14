@@ -64,6 +64,7 @@ def seed_demo_library(repo: InMemoryLibraryDataRepository, library_id: str = "li
         ill_request_id="ill_unambiguous", library_id=library_id,
         requested_title="The Structure of Scientific Revolutions",
         requester_patron_id="patron_ill_1",
+        requested_at=datetime(2026, 8, 20, 9, tzinfo=timezone.utc),
     ))
     repo.set_catalog_candidates(library_id, "The Structure of Scientific Revolutions", [
         CatalogCandidate(holding_id="hold_1", edition="1st", location="lib_partner_a", availability="available"),
@@ -74,6 +75,7 @@ def seed_demo_library(repo: InMemoryLibraryDataRepository, library_id: str = "li
         ill_request_id="ill_ambiguous", library_id=library_id,
         requested_title="Middlemarch",
         requester_patron_id="patron_ill_2",
+        requested_at=datetime(2026, 8, 24, 13, 30, tzinfo=timezone.utc),
     ))
     repo.set_catalog_candidates(library_id, "Middlemarch", [
         CatalogCandidate(holding_id="hold_2a", edition="Penguin Classics", location="lib_partner_a", availability="available"),
@@ -87,6 +89,7 @@ def seed_demo_library(repo: InMemoryLibraryDataRepository, library_id: str = "li
         ill_request_id="ill_open_1", library_id=library_id,
         requested_title="The Hobbit",
         requester_patron_id="patron_ill_3",
+        requested_at=datetime(2026, 8, 27, 10, 15, tzinfo=timezone.utc),
     ))
     repo.set_catalog_candidates(library_id, "The Hobbit", [
         CatalogCandidate(holding_id="hold_3a", edition="Illustrated", location="lib_partner_a", availability="available"),
@@ -96,6 +99,7 @@ def seed_demo_library(repo: InMemoryLibraryDataRepository, library_id: str = "li
         ill_request_id="ill_open_2", library_id=library_id,
         requested_title="Pride and Prejudice",
         requester_patron_id="patron_ill_4",
+        requested_at=datetime(2026, 8, 29, 15, 45, tzinfo=timezone.utc),
     ))
     repo.set_catalog_candidates(library_id, "Pride and Prejudice", [
         CatalogCandidate(holding_id="hold_4a", edition="Norton Critical Edition", location="lib_partner_b", availability="available"),
@@ -105,6 +109,7 @@ def seed_demo_library(repo: InMemoryLibraryDataRepository, library_id: str = "li
         ill_request_id="ill_open_3", library_id=library_id,
         requested_title="Beloved",
         requester_patron_id="patron_ill_5",
+        requested_at=datetime(2026, 9, 2, 11, tzinfo=timezone.utc),
     ))
     repo.set_catalog_candidates(library_id, "Beloved", [
         CatalogCandidate(holding_id="hold_5a", edition="1st", location="lib_partner_a", availability="available"),

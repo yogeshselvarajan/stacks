@@ -36,7 +36,9 @@ export const CALENDAR_FIXTURE: CalendarBooking[] = [
 
 export const ILL_QUEUE_FIXTURE: IllRequest[] = [
   {
-    illRequestId: "ill_req_123", requestedTitle: "The Left Hand of Darkness", status: "open", tier: "YELLOW",
+    illRequestId: "ill_req_123", requestedTitle: "The Left Hand of Darkness",
+    requesterName: "Devi Kapoor", requestedAt: "2026-08-20T09:00:00+00:00",
+    status: "open", tier: "YELLOW",
     specialistTrace: { narrowedCandidateId: "hold_2a", confidence: 0.72, stillAmbiguous: false },
     recallSummary: "This requester has accepted a substitute edition without escalating on 3 prior occasions.",
   },
