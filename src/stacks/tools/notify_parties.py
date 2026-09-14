@@ -4,7 +4,7 @@ token-gated. See docs/architecture/tool_architecture.md section 3.5.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Protocol
 
 from strands import tool
 
@@ -14,6 +14,29 @@ from stacks.hitl.tier_ledger import TierLedger
 from stacks.types import ApprovalToken
 
 _GUARDRAIL_DENYLIST = ("social security number", "ssn:", "credit card")
+
+
+class GuardrailClient(Protocol):
+    """Checks text for content that must never leave this tool. Real
+    implementation: stacks.guardrails.bedrock_guardrail.BedrockGuardrailClient
+    (a real, provisioned AWS Bedrock Guardrail via ApplyGuardrail).
+    Defaults to _DenylistGuardrailClient below when not supplied, so every
+    existing caller (including the whole fast test suite) keeps working
+    unmodified -- this is a strict upgrade path, not a breaking change.
+    """
+
+    def check(self, text: str) -> list[str]: ...
+
+
+class _DenylistGuardrailClient:
+    """Plan 1's original stand-in, kept as the zero-AWS-credentials
+    default for local dev and the fast test suite. Production wires a
+    real BedrockGuardrailClient instead (see stacks.agent.build_stacks_agent).
+    """
+
+    def check(self, text: str) -> list[str]:
+        combined = text.lower()
+        return [f"blocked_pattern: {p}" for p in _GUARDRAIL_DENYLIST if p in combined]
 
 _ELEVATED_SEVERITY_KEYWORDS = (
     "fee", "fine", "charge",
@@ -38,7 +61,15 @@ class NotificationSink:
         return list(self._sent)
 
 
-def make_notify_parties(repo: LibraryDataRepository, sink: NotificationSink, tier_ledger: TierLedger, session_library_id: str):
+def make_notify_parties(
+    repo: LibraryDataRepository,
+    sink: NotificationSink,
+    tier_ledger: TierLedger,
+    session_library_id: str,
+    guardrail_client: GuardrailClient | None = None,
+):
+    guardrail_client = guardrail_client or _DenylistGuardrailClient()
+
     @tool
     def notify_parties(
         library_id: str,
@@ -67,7 +98,7 @@ def make_notify_parties(repo: LibraryDataRepository, sink: NotificationSink, tie
         if library_id != session_library_id:
             return {"status": "error", "content": [{"text": "cross_tenant_denied"}]}
 
-        findings = _guardrail_check(subject, body)
+        findings = guardrail_client.check(f"{subject}\n{body}")
         if findings:
             return {"status": "success", "content": [{"json": {"notification_id": None, "status": "blocked_by_guardrail", "guardrail_findings": findings}}]}
 
@@ -102,16 +133,6 @@ def make_notify_parties(repo: LibraryDataRepository, sink: NotificationSink, tie
         return {"status": "success", "content": [{"json": {"notification_id": notification_id, "status": "sent", "guardrail_findings": None}}]}
 
     return notify_parties
-
-
-def _guardrail_check(subject: str, body: str) -> list[str]:
-    """Plan 1 stand-in for Bedrock Guardrails -- a fixed denylist a real
-    Guardrail policy would also block. Replaced by a real ApplyGuardrail
-    call in the AWS-infrastructure follow-on task; the call site
-    (unconditional, before every send) does not change.
-    """
-    combined = f"{subject}\n{body}".lower()
-    return [f"blocked_pattern: {p}" for p in _GUARDRAIL_DENYLIST if p in combined]
 
 
 def _elevated_severity_check(subject: str, body: str) -> list[str]:

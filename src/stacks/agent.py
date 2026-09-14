@@ -117,7 +117,23 @@ def build_stacks_agent(
     resolve_room_conflict = make_resolve_room_conflict(repo, room_conflict_cache, tier_ledger, library_id)
     route_ill_request = make_route_ill_request(repo, ill_cache, tier_ledger, library_id, memory, ill_disambiguation_cache)
     run_overdue_chase = make_run_overdue_chase(repo, overdue_cache, tier_ledger, library_id, now, memory)
-    notify_parties = make_notify_parties(repo, notification_sink, tier_ledger, library_id)
+    guardrail_client = None
+    guardrail_id = os.environ.get("STACKS_BEDROCK_GUARDRAIL_ID")
+    guardrail_version = os.environ.get("STACKS_BEDROCK_GUARDRAIL_VERSION")
+    if guardrail_id and guardrail_version:
+        # Real Bedrock Guardrail (see scripts/provision_bedrock_guardrail.py).
+        # Not set -> notify_parties falls back to its own denylist stand-in
+        # (fail-open on missing config, not fail-closed, since a missing
+        # Guardrail resource is an environment setup gap, not a signal that
+        # notifications are unsafe -- the denylist is a strict subset of
+        # what the real Guardrail also blocks).
+        from stacks.guardrails.bedrock_guardrail import BedrockGuardrailClient
+
+        guardrail_client = BedrockGuardrailClient(
+            guardrail_id=guardrail_id, guardrail_version=guardrail_version,
+            region=os.environ.get("STACKS_AWS_REGION", "us-west-2"),
+        )
+    notify_parties = make_notify_parties(repo, notification_sink, tier_ledger, library_id, guardrail_client=guardrail_client)
 
     hitl_gate = HitlGateHook(
         room_conflict_cache, ill_cache, overdue_cache, ill_disambiguation_cache,

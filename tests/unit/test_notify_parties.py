@@ -1,3 +1,7 @@
+import os
+
+import pytest
+
 from stacks.data.fixtures import seed_demo_library
 from stacks.data.memory_repository import InMemoryLibraryDataRepository
 from stacks.hitl.classify import Tier, Workflow
@@ -210,3 +214,43 @@ def test_room_conflict_with_missing_booking_fails_closed():
     )
     assert result["content"][0]["json"]["status"] == "blocked_unauthorized_recipient"
     assert sink.all() == []
+
+
+@pytest.mark.skipif(
+    not os.environ.get("RUN_LIVE_BEDROCK_TESTS"),
+    reason="Requires real AWS credentials and a provisioned Bedrock Guardrail. Set RUN_LIVE_BEDROCK_TESTS=1 to run.",
+)
+def test_real_bedrock_guardrail_blocks_ssn_content_live():
+    """Proves the real Guardrail (not the denylist stand-in) actually
+    blocks live, per final_problem_selection.md's stretch goal: 'demonstrated
+    blocking something live in the demo, not just declared in a config file'.
+    Run: STACKS_BEDROCK_GUARDRAIL_ID=<id> STACKS_BEDROCK_GUARDRAIL_VERSION=<v>
+      RUN_LIVE_BEDROCK_TESTS=1 pytest tests/unit/test_notify_parties.py -k live
+    """
+    from stacks.guardrails.bedrock_guardrail import BedrockGuardrailClient
+
+    guardrail_client = BedrockGuardrailClient(
+        guardrail_id=os.environ["STACKS_BEDROCK_GUARDRAIL_ID"],
+        guardrail_version=os.environ["STACKS_BEDROCK_GUARDRAIL_VERSION"],
+        region=os.environ.get("STACKS_AWS_REGION", "us-west-2"),
+    )
+    tool_fn, _, sink, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "overdue:circ_green", Tier.GREEN, Workflow.OVERDUE_CHASE)
+    # Rebuild the tool with the real guardrail client wired in.
+    repo = InMemoryLibraryDataRepository()
+    seed_demo_library(repo, library_id="lib_demo")
+    tool_fn = make_notify_parties(repo, sink, tier_ledger, "lib_demo", guardrail_client=guardrail_client)
+
+    blocked = tool_fn(
+        library_id="lib_demo", related_action_id="overdue:circ_green",
+        subject="Reminder", body="Please provide your Social Security Number to confirm.",
+    )
+    assert blocked["content"][0]["json"]["status"] == "blocked_by_guardrail"
+    assert blocked["content"][0]["json"]["guardrail_findings"]
+    assert sink.all() == []
+
+    clean = tool_fn(
+        library_id="lib_demo", related_action_id="overdue:circ_green",
+        subject="Reminder", body="Your item is overdue, please return it soon.",
+    )
+    assert clean["content"][0]["json"]["status"] == "sent"
