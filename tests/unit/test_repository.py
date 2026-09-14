@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from stacks.data.fixtures import seed_demo_library
 from stacks.data.memory_repository import InMemoryLibraryDataRepository
-from stacks.data.models import BookingRecord, BookingType
+from stacks.data.models import BookingRecord, BookingType, CirculationRecord
 
 
 def test_seed_demo_library_populates_a_room_conflict_pair():
@@ -75,3 +75,25 @@ def test_cancelled_booking_does_not_participate_in_a_later_overlap_query():
         datetime(2026, 9, 10, tzinfo=timezone.utc), datetime(2026, 9, 10, 2, tzinfo=timezone.utc),
     )
     assert bookings == []
+
+
+def test_delete_booking_removes_the_record():
+    repo = InMemoryLibraryDataRepository()
+    repo.save_booking(BookingRecord(
+        booking_id="b_test_delete", library_id="lib_demo", room_id="room_a",
+        start=datetime(2026, 9, 1, 10, tzinfo=timezone.utc), end=datetime(2026, 9, 1, 11, tzinfo=timezone.utc),
+        booked_by="patron_x", booking_type=BookingType.ONE_OFF_RENTER,
+    ))
+    repo.delete_booking("lib_demo", "b_test_delete")
+    assert repo.get_booking("lib_demo", "b_test_delete") is None
+
+
+def test_delete_circulation_record_removes_the_record():
+    repo = InMemoryLibraryDataRepository()
+    repo.save_circulation_record(CirculationRecord(
+        circulation_record_id="circ_test_delete", library_id="lib_demo",
+        patron_id="patron_x", item_id="item_x", item_type="book",
+        due_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
+    ))
+    repo.delete_circulation_record("lib_demo", "circ_test_delete")
+    assert repo.get_circulation_record("lib_demo", "circ_test_delete") is None

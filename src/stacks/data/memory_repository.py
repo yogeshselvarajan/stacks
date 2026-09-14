@@ -32,6 +32,9 @@ class InMemoryLibraryDataRepository:
     def save_booking(self, booking: BookingRecord) -> None:
         self._bookings[(booking.library_id, booking.booking_id)] = booking
 
+    def delete_booking(self, library_id: LibraryId, booking_id: BookingId) -> None:
+        self._bookings.pop((library_id, booking_id), None)
+
     def get_ill_request(self, library_id: LibraryId, ill_request_id: ILLRequestId) -> ILLRequestRecord | None:
         return self._ill_requests.get((library_id, ill_request_id))
 
@@ -61,6 +64,9 @@ class InMemoryLibraryDataRepository:
 
     def save_circulation_record(self, record: CirculationRecord) -> None:
         self._circulation_records[(record.library_id, record.circulation_record_id)] = record
+
+    def delete_circulation_record(self, library_id: LibraryId, circulation_record_id: CirculationRecordId) -> None:
+        self._circulation_records.pop((library_id, circulation_record_id), None)
 
     def list_circulation_records(self, library_id: LibraryId) -> list[CirculationRecord]:
         return [r for (lib, _), r in self._circulation_records.items() if lib == library_id]

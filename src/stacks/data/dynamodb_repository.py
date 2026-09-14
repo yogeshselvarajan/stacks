@@ -59,6 +59,9 @@ class DynamoDBLibraryDataRepository:
         item["room_key"] = f"{booking.library_id}#{booking.room_id}"
         self._bookings.put_item(Item=item)
 
+    def delete_booking(self, library_id: LibraryId, booking_id: BookingId) -> None:
+        self._bookings.delete_item(Key={"library_id": library_id, "booking_id": booking_id})
+
     def get_ill_request(self, library_id: LibraryId, ill_request_id: ILLRequestId) -> ILLRequestRecord | None:
         response = self._ill_requests.get_item(Key={"library_id": library_id, "ill_request_id": ill_request_id})
         item = response.get("Item")
@@ -104,6 +107,9 @@ class DynamoDBLibraryDataRepository:
 
     def save_circulation_record(self, record: CirculationRecord) -> None:
         self._loans.put_item(Item=record.model_dump(mode="json"))
+
+    def delete_circulation_record(self, library_id: LibraryId, circulation_record_id: CirculationRecordId) -> None:
+        self._loans.delete_item(Key={"library_id": library_id, "circulation_record_id": circulation_record_id})
 
     def list_circulation_records(self, library_id: LibraryId) -> list[CirculationRecord]:
         """library_id is the Loans table's own partition key (see
