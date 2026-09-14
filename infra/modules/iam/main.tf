@@ -76,6 +76,21 @@ data "aws_iam_policy_document" "agent_runtime_baseline" {
     # infra/environments/dev.tfvars) to that ARN and re-apply, which
     # narrows this statement automatically via the ternary above.
   }
+
+  statement {
+    sid       = "BedrockGuardrailScoped"
+    effect    = "Allow"
+    actions   = ["bedrock:ApplyGuardrail"]
+    resources = var.bedrock_guardrail_arn != "" ? [var.bedrock_guardrail_arn] : ["*"]
+    # Found live, 2026-09-14: notify_parties (src/stacks/tools/notify_parties.py)
+    # calls the real Bedrock Guardrail on every single invocation once
+    # STACKS_BEDROCK_GUARDRAIL_ID/VERSION are set, which they already were
+    # on the deployed runtime -- but this statement never existed, so
+    # every real call failed with a live AccessDeniedException, masked
+    # for a while by a separate bug (notify_parties previously had no
+    # default subject/body, so most calls failed earlier, at argument
+    # binding, before ever reaching the guardrail call).
+  }
 }
 
 resource "aws_iam_role_policy" "agent_runtime_baseline" {

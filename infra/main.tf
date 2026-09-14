@@ -33,6 +33,11 @@ module "iam" {
   bedrock_foundation_model_arns = var.bedrock_foundation_model_arns
   runtime_log_group_arn_pattern = var.runtime_log_group_arn_pattern
   agent_runtime_arn             = module.agentcore_runtime.agent_runtime_arn
+  # Real Bedrock Guardrail ARN, constructed the same way AWS itself
+  # names the resource -- empty until bedrock_guardrail_id is set, which
+  # falls back to the iam module's own wildcard default (see that
+  # module's variables.tf for why).
+  bedrock_guardrail_arn = var.bedrock_guardrail_id != "" ? "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:guardrail/${var.bedrock_guardrail_id}" : ""
 }
 
 module "agentcore_runtime" {

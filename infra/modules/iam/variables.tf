@@ -21,6 +21,12 @@ variable "agentcore_memory_arn" {
   default     = ""
 }
 
+variable "bedrock_guardrail_arn" {
+  description = "The real, provisioned Bedrock Guardrail's ARN (scripts/provision_bedrock_guardrail.py). Empty string if not yet known (falls back to a wildcard, tightened once set) -- mirrors agentcore_memory_arn's own pattern above. Found live, 2026-09-14: the runtime's own STACKS_BEDROCK_GUARDRAIL_ID/VERSION env vars were already set and notify_parties was already calling the real ApplyGuardrail API, but this role had never been granted bedrock:ApplyGuardrail at all -- every real notify_parties call failed with a live AccessDeniedException, even though local tests (which default to the denylist stand-in, never a real AWS call) never exercised this path."
+  type        = string
+  default     = ""
+}
+
 variable "bedrock_model_arn" {
   description = "The exact Bedrock model/inference-profile ARN build_stacks_agent invokes, confirmed working by Task 7's smoke test."
   type        = string
