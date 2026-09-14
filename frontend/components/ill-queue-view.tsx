@@ -27,6 +27,18 @@ const EXPAND_TRIGGER_CLASS =
   "stacks-focus-ring flex w-full items-center gap-1.5 rounded px-1 py-1 text-left transition-all hover:brightness-90 active:brightness-95";
 const EXPAND_DISABLED_CLASS = "flex items-center gap-1.5 px-1 py-1 opacity-60";
 
+const STATUS_LABELS: Record<IllRequest["status"], string> = {
+  open: "Open",
+  routed: "Routed",
+  no_match: "No match found",
+};
+
+const STATUS_DOT_COLORS: Record<IllRequest["status"], string> = {
+  open: "var(--color-ink-faint)",
+  routed: "var(--color-tier-green-fill)",
+  no_match: "var(--color-tier-yellow-fill)",
+};
+
 export function IllQueueView({ requests, status }: { requests: IllRequest[]; status: Status }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -108,7 +120,16 @@ export function IllQueueView({ requests, status }: { requests: IllRequest[]; sta
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2">{r.tier ? <TierBadge tier={r.tier} /> : r.status}</td>
+                  <td className="px-4 py-2">
+                    {r.tier ? (
+                      <TierBadge tier={r.tier} />
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS_DOT_COLORS[r.status] }} />
+                        <span style={{ color: "var(--color-ink-muted)" }}>{STATUS_LABELS[r.status]}</span>
+                      </span>
+                    )}
+                  </td>
                 </tr>
                 {isExpanded && r.specialistTrace && (
                   <tr id={detailId}>

@@ -12,6 +12,29 @@ const PENDING_REVIEW_COLORS: Record<"YELLOW" | "RED", { text: string; bg: string
   RED: { text: "var(--color-tier-red-text)", bg: "var(--color-tier-red-bg)" },
 };
 
+const STATUS_LABELS: Record<CalendarBooking["status"], string> = {
+  confirmed: "Confirmed",
+  cancelled: "Cancelled",
+  pending_conflict: "Pending conflict",
+};
+
+const STATUS_DOT_COLORS: Record<CalendarBooking["status"], string> = {
+  confirmed: "var(--color-tier-green-fill)",
+  cancelled: "var(--color-ink-faint)",
+  pending_conflict: "var(--color-tier-yellow-fill)",
+};
+
+function formatDateRange(start: string, end: string): string {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return `${start} - ${end}`;
+  }
+  const dateFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const timeFormatter = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${dateFormatter.format(startDate)} · ${timeFormatter.format(startDate)} – ${timeFormatter.format(endDate)}`;
+}
+
 // Craft-bar item 1 (frontend_architecture.md section 7.4): a pending
 // conflict's badge is a real drill-in link into the Approval Inbox, so it
 // needs all six interactive states, not just a default/hover pair.
@@ -80,19 +103,20 @@ export function CalendarView({ bookings, status }: { bookings: CalendarBooking[]
       <thead>
         <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
           <th className="px-4 py-2 text-left">Room</th>
-          <th className="px-4 py-2 text-left">Start</th>
-          <th className="px-4 py-2 text-left">End</th>
+          <th className="px-4 py-2 text-left">When</th>
           <th className="px-4 py-2 text-left">Status</th>
         </tr>
       </thead>
       <tbody>
-        {status === "loading" && Array.from({ length: 3 }).map((_, i) => <RowSkeleton key={i} columns={4} />)}
+        {status === "loading" && Array.from({ length: 3 }).map((_, i) => <RowSkeleton key={i} columns={3} />)}
         {status === "ready" && bookings.length === 0 && (
-          <tr><td colSpan={4} className="px-4 py-6 text-center" style={{ color: "var(--color-ink-muted)" }}>No bookings for this room and date range. Try a different room or week.</td></tr>
+          <tr><td colSpan={3} className="px-4 py-6 text-center" style={{ color: "var(--color-ink-muted)" }}>No bookings for this room and date range. Try a different room or week.</td></tr>
         )}
         {status === "ready" && bookings.map((b) => (
           <tr
             key={b.bookingId}
+            data-testid="calendar-row"
+            data-room-id={b.roomId}
             style={{
               borderBottom: "1px solid var(--color-border)",
               backgroundImage:
@@ -101,12 +125,10 @@ export function CalendarView({ bookings, status }: { bookings: CalendarBooking[]
                   : undefined,
             }}
           >
-            <td className="px-4 py-2">
-              <div>{b.roomName}</div>
-              <div className="text-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--color-ink-muted)" }}>{b.roomId}</div>
+            <td className="px-4 py-2" style={{ color: "var(--color-ink)" }}>{b.roomName}</td>
+            <td className="px-4 py-2" style={{ fontVariantNumeric: "tabular-nums", color: "var(--color-ink-muted)" }}>
+              {formatDateRange(b.start, b.end)}
             </td>
-            <td className="px-4 py-2" style={{ fontVariantNumeric: "tabular-nums" }}>{b.start}</td>
-            <td className="px-4 py-2" style={{ fontVariantNumeric: "tabular-nums" }}>{b.end}</td>
             <td className="px-4 py-2">
               {b.conflictResolution ? (
                 <div className="flex items-center gap-2">
@@ -116,7 +138,10 @@ export function CalendarView({ bookings, status }: { bookings: CalendarBooking[]
               ) : b.status === "pending_conflict" ? (
                 <PendingReviewBadge pendingReview={b.pendingReview} />
               ) : (
-                b.status
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS_DOT_COLORS[b.status] }} />
+                  <span style={{ color: "var(--color-ink-muted)" }}>{STATUS_LABELS[b.status]}</span>
+                </span>
               )}
             </td>
           </tr>

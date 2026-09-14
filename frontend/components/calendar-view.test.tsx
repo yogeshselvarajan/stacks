@@ -17,10 +17,10 @@ describe("CalendarView", () => {
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
-  it("populated state: shows the room's human-readable name, not just its raw id", () => {
+  it("populated state: shows the room's human-readable name, never its raw internal id", () => {
     render(<CalendarView bookings={CALENDAR_FIXTURE} status="ready" />);
     expect(screen.getByText("Story Room")).toBeInTheDocument();
-    expect(screen.getByText("room_a")).toBeInTheDocument();
+    expect(screen.queryByText("room_a")).not.toBeInTheDocument();
   });
 
   it("empty state: names the room/date filter as why nothing shows", () => {
@@ -71,7 +71,7 @@ describe("CalendarView", () => {
 describe("CalendarView conflict rows", () => {
   it("a pending-conflict row gets the diagonal-hatch background pattern, not just a badge color", () => {
     render(<CalendarView bookings={CALENDAR_FIXTURE} status="ready" />);
-    const conflictRow = screen.getByText("room_b").closest("tr");
+    const conflictRow = screen.getByText("Community Room B").closest("tr");
     expect(conflictRow?.style.backgroundImage).toContain("repeating-linear-gradient");
   });
 });
