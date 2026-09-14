@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { OverdueQueueView } from "@/components/overdue-queue-view";
+import { NewOverdueCaseForm } from "@/components/new-overdue-case-form";
 import { OverdueCase } from "@/lib/api/types";
 import { getOverdueQueue } from "@/lib/api/overdue-queue";
 
@@ -13,7 +14,7 @@ export default function OverdueQueuePage() {
     document.title = "Stacks | Overdue";
   }, []);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     getOverdueQueue()
       .then((c) => {
         setCases(c);
@@ -22,5 +23,14 @@ export default function OverdueQueuePage() {
       .catch(() => setStatus("error"));
   }, []);
 
-  return <OverdueQueueView cases={cases} status={status} />;
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return (
+    <>
+      <NewOverdueCaseForm onCreated={refetch} />
+      <OverdueQueueView cases={cases} status={status} />
+    </>
+  );
 }
