@@ -171,7 +171,12 @@ export function NewIllRequestForm({ onCreated }: { onCreated?: () => void }) {
         {!busy && (
           <button
             type="button"
-            onClick={() => setPhase("collapsed")}
+            onClick={() => {
+              setPhase("collapsed");
+              setTitle("");
+              setEditionHint("");
+              setPatronId("");
+            }}
             className="stacks-focus-ring rounded px-3 py-2 text-sm"
             style={{ color: "var(--color-ink-muted)" }}
           >

@@ -97,6 +97,29 @@ describe("NewIllRequestForm", () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
   });
 
+  it("shows a could-not-process message when case creation succeeds but agent invocation fails", async () => {
+    vi.mocked(illQueueApi.createIllRequest).mockResolvedValue({
+      illRequestId: "ill_fail1", status: "agent_invocation_failed", outcome: null,
+    });
+    render(<NewIllRequestForm />);
+    fireEvent.click(screen.getByRole("button", { name: /new request/i }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Middlemarch" } });
+    fireEvent.change(screen.getByLabelText("Requester patron ID"), { target: { value: "patron_x" } });
+    fireEvent.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByText(/could not process it yet/i)).toBeInTheDocument();
+  });
+
+  it("resets the draft fields when Cancel is clicked, unlike a stale reopen", () => {
+    render(<NewIllRequestForm />);
+    fireEvent.click(screen.getByRole("button", { name: /new request/i }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Middlemarch" } });
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /new request/i }));
+    expect(screen.getByLabelText("Title")).toHaveValue("");
+  });
+
   it("every input and the submit button carry the shared focus-ring class", () => {
     render(<NewIllRequestForm />);
     fireEvent.click(screen.getByRole("button", { name: /new request/i }));
