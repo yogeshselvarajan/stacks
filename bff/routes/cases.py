@@ -11,12 +11,13 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from stacks.data.models import CirculationRecord, ILLRequestRecord
+from stacks.data.models import BookingRecord, BookingType, CirculationRecord, ILLRequestRecord
 from stacks.data.repository import LibraryDataRepository
 from stacks.hooks.audit_log import AuditLogRecord, AuditLogSink
 from stacks.identity.claims import StaffIdentityClaims
@@ -196,3 +197,83 @@ async def create_overdue_case(
     if tool_outcome == "committed":
         return {"circulationRecordId": circulation_record_id, "status": "resolved", "outcome": tool_outcome}
     return {"circulationRecordId": circulation_record_id, "status": "needs_attention", "outcome": tool_outcome}
+
+
+class CreateBookingBody(BaseModel):
+    roomId: Literal["room_a", "room_b"]
+    start: datetime
+    end: datetime
+    bookingType: Literal["recurring_program", "one_off_renter", "staff_internal", "walk_in"]
+    bookedBy: str = Field(min_length=1)
+
+
+@router.post("/api/bookings", dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit)])
+async def create_booking(
+    body: CreateBookingBody,
+    claims: StaffIdentityClaims = Depends(get_current_claims),
+    repo: LibraryDataRepository = Depends(get_repo),
+    audit_sink: AuditLogSink = Depends(get_audit_sink),
+    agent_runtime_client: AgentRuntimeClient = Depends(get_agent_runtime_client),
+) -> dict:
+    booking_id = f"b_{uuid.uuid4().hex[:12]}"
+    new_booking = BookingRecord(
+        booking_id=booking_id,
+        library_id=claims.library_id,
+        room_id=body.roomId,
+        start=body.start,
+        end=body.end,
+        booked_by=body.bookedBy,
+        booking_type=BookingType(body.bookingType),
+    )
+    await run_in_threadpool(repo.save_booking, new_booking)
+
+    await run_in_threadpool(
+        audit_sink.append,
+        AuditLogRecord(
+            audit_id=str(uuid.uuid4()),
+            sequence=None,
+            tool_name="create_booking",
+            tool_input={"booking_id": booking_id, "room_id": body.roomId},
+            tool_output_status="success",
+            outcome="created",
+            session_id=f"case_create:{booking_id}",
+            library_id=claims.library_id,
+            actor=AuditActor.HUMAN,
+            actor_identity=claims.role,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            hitl_tier=None,
+            notification_id=None,
+        ),
+    )
+
+    existing = await run_in_threadpool(repo.get_bookings_for_room, claims.library_id, body.roomId, body.start, body.end)
+    overlapping = [b for b in existing if b.booking_id != booking_id]
+    if not overlapping:
+        return {"bookingId": booking_id, "status": "no_conflict", "outcome": None, "conflictingBookingIds": None}
+
+    conflicting_ids = [booking_id] + [b.booking_id for b in overlapping]
+    invoke_payload = {
+        "role": claims.role,
+        "library_id": claims.library_id,
+        "case_review_role": claims.case_review_role,
+        "session_id": f"case_create_{booking_id}_{uuid.uuid4().hex[:8]}",
+        "tool": "resolve_room_conflict",
+        "prompt": (
+            f"There is a room booking conflict in {body.roomId} for library {claims.library_id} "
+            f"involving these booking ids: {', '.join(conflicting_ids)}. Evaluate it first, then, "
+            f"based on the policy and evaluation, commit the resolution citing the applicable policy clause."
+        ),
+    }
+    try:
+        agent_response = await run_in_threadpool(agent_runtime_client.invoke, invoke_payload)
+    except Exception:
+        logger.exception("booking_agent_invocation_failed")
+        await run_in_threadpool(repo.delete_booking, claims.library_id, booking_id)
+        return {"bookingId": booking_id, "status": "agent_invocation_failed", "outcome": None, "conflictingBookingIds": conflicting_ids}
+
+    if agent_response.get("stop_reason") == "interrupt":
+        return {"bookingId": booking_id, "status": "pending_approval", "outcome": None, "conflictingBookingIds": conflicting_ids}
+    tool_outcome = agent_response.get("tool_outcome")
+    if tool_outcome == "committed":
+        return {"bookingId": booking_id, "status": "resolved", "outcome": tool_outcome, "conflictingBookingIds": conflicting_ids}
+    return {"bookingId": booking_id, "status": "needs_attention", "outcome": tool_outcome, "conflictingBookingIds": conflicting_ids}
