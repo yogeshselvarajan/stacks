@@ -28,6 +28,7 @@ from bff.clients.agent_runtime import AgentRuntimeClient
 from bff.csrf import verify_csrf
 from bff.deps import get_agent_runtime_client, get_audit_sink, get_current_claims, get_pending_approvals_sink, get_repo
 from bff.rate_limit import enforce_case_creation_rate_limit
+from bff.workflow_authz import require_ill_access, require_overdue_access, require_room_booking_access
 
 router = APIRouter()
 
@@ -42,7 +43,7 @@ class CreateIllRequestBody(BaseModel):
 
 @router.post(
     "/api/ill-requests",
-    dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit)],
+    dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit), Depends(require_ill_access)],
 )
 async def create_ill_request(
     body: CreateIllRequestBody,
@@ -131,7 +132,7 @@ class CreateOverdueCaseBody(BaseModel):
 
 @router.post(
     "/api/overdue-cases",
-    dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit)],
+    dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit), Depends(require_overdue_access)],
 )
 async def create_overdue_case(
     body: CreateOverdueCaseBody,
@@ -233,7 +234,10 @@ class CreateBookingBody(BaseModel):
         return self
 
 
-@router.post("/api/bookings", dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit)])
+@router.post(
+    "/api/bookings",
+    dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit), Depends(require_room_booking_access)],
+)
 async def create_booking(
     body: CreateBookingBody,
     claims: StaffIdentityClaims = Depends(get_current_claims),

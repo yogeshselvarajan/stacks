@@ -22,6 +22,7 @@ from stacks.memory.store import MemoryStore
 from bff.deps import get_audit_sink, get_current_claims, get_memory, get_pending_approvals_sink, get_repo
 from bff.display_names import item_title, patron_name, room_name
 from bff.rate_limit import enforce_read_rate_limit
+from bff.workflow_authz import require_approvals_access, require_ill_access, require_overdue_access, require_room_booking_access
 
 
 def _ill_recall_summary(memory: MemoryStore | None, library_id: str, requester_patron_id: str) -> str | None:
@@ -99,7 +100,7 @@ def _summary_for_pending(record, repo: LibraryDataRepository) -> tuple[str, list
     return (record.case_id, None)
 
 
-@router.get("/api/approvals")
+@router.get("/api/approvals", dependencies=[Depends(require_approvals_access)])
 async def get_approvals(
     claims: StaffIdentityClaims = Depends(get_current_claims),
     sink: PendingApprovalsSink = Depends(get_pending_approvals_sink),
@@ -120,7 +121,7 @@ async def get_approvals(
     return cases
 
 
-@router.get("/api/approvals/{case_id}")
+@router.get("/api/approvals/{case_id}", dependencies=[Depends(require_approvals_access)])
 async def get_approval_case(
     case_id: str,
     claims: StaffIdentityClaims = Depends(get_current_claims),
@@ -140,7 +141,7 @@ async def get_approval_case(
     }
 
 
-@router.get("/api/calendar")
+@router.get("/api/calendar", dependencies=[Depends(require_room_booking_access)])
 async def get_calendar(
     room_id: str | None = None,
     claims: StaffIdentityClaims = Depends(get_current_claims),
@@ -169,7 +170,7 @@ async def get_calendar(
     ]
 
 
-@router.get("/api/ill-queue")
+@router.get("/api/ill-queue", dependencies=[Depends(require_ill_access)])
 async def get_ill_queue(
     claims: StaffIdentityClaims = Depends(get_current_claims),
     repo: LibraryDataRepository = Depends(get_repo),
@@ -231,7 +232,7 @@ def _tier_history_for_record(record, pending_case_ids: set[str]) -> list[dict]:
     return history
 
 
-@router.get("/api/overdue-queue")
+@router.get("/api/overdue-queue", dependencies=[Depends(require_overdue_access)])
 async def get_overdue_queue(
     claims: StaffIdentityClaims = Depends(get_current_claims),
     repo: LibraryDataRepository = Depends(get_repo),
