@@ -47,7 +47,7 @@ def _overdue_recall_summary(memory: MemoryStore | None, library_id: str, patron_
         return None
     return f"Hardship flag on file since {fact.flagged_at.date().isoformat()}."
 
-router = APIRouter(dependencies=[Depends(enforce_read_rate_limit)])
+router = APIRouter()
 
 # LibraryDataRepository has no "list every room" method -- Plan 3's own
 # scope note names the Spaces table as provisioned but deliberately unread
@@ -100,7 +100,7 @@ def _summary_for_pending(record, repo: LibraryDataRepository) -> tuple[str, list
     return (record.case_id, None)
 
 
-@router.get("/api/approvals", dependencies=[Depends(require_approvals_access)])
+@router.get("/api/approvals", dependencies=[Depends(require_approvals_access), Depends(enforce_read_rate_limit)])
 async def get_approvals(
     claims: StaffIdentityClaims = Depends(get_current_claims),
     sink: PendingApprovalsSink = Depends(get_pending_approvals_sink),
@@ -121,7 +121,7 @@ async def get_approvals(
     return cases
 
 
-@router.get("/api/approvals/{case_id}", dependencies=[Depends(require_approvals_access)])
+@router.get("/api/approvals/{case_id}", dependencies=[Depends(require_approvals_access), Depends(enforce_read_rate_limit)])
 async def get_approval_case(
     case_id: str,
     claims: StaffIdentityClaims = Depends(get_current_claims),
@@ -141,7 +141,7 @@ async def get_approval_case(
     }
 
 
-@router.get("/api/calendar", dependencies=[Depends(require_room_booking_access)])
+@router.get("/api/calendar", dependencies=[Depends(require_room_booking_access), Depends(enforce_read_rate_limit)])
 async def get_calendar(
     room_id: str | None = None,
     claims: StaffIdentityClaims = Depends(get_current_claims),
@@ -170,7 +170,7 @@ async def get_calendar(
     ]
 
 
-@router.get("/api/ill-queue", dependencies=[Depends(require_ill_access)])
+@router.get("/api/ill-queue", dependencies=[Depends(require_ill_access), Depends(enforce_read_rate_limit)])
 async def get_ill_queue(
     claims: StaffIdentityClaims = Depends(get_current_claims),
     repo: LibraryDataRepository = Depends(get_repo),
@@ -232,7 +232,7 @@ def _tier_history_for_record(record, pending_case_ids: set[str]) -> list[dict]:
     return history
 
 
-@router.get("/api/overdue-queue", dependencies=[Depends(require_overdue_access)])
+@router.get("/api/overdue-queue", dependencies=[Depends(require_overdue_access), Depends(enforce_read_rate_limit)])
 async def get_overdue_queue(
     claims: StaffIdentityClaims = Depends(get_current_claims),
     repo: LibraryDataRepository = Depends(get_repo),
@@ -261,7 +261,7 @@ async def get_overdue_queue(
     return cases
 
 
-@router.get("/api/audit")
+@router.get("/api/audit", dependencies=[Depends(enforce_read_rate_limit)])
 async def get_audit_list(
     claims: StaffIdentityClaims = Depends(get_current_claims),
     sink: AuditLogSink = Depends(get_audit_sink),
@@ -270,7 +270,7 @@ async def get_audit_list(
     return [_serialize_audit_record(r) for r in records]
 
 
-@router.get("/api/audit/{case_id}")
+@router.get("/api/audit/{case_id}", dependencies=[Depends(enforce_read_rate_limit)])
 async def get_audit_trace(
     case_id: str,
     claims: StaffIdentityClaims = Depends(get_current_claims),

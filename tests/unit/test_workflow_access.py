@@ -1,4 +1,5 @@
-from stacks.identity.workflow_access import role_can_access_workflow
+from stacks.hitl.classify import Workflow
+from stacks.identity.workflow_access import WORKFLOW_OWNING_ROLE, role_can_access_workflow
 
 
 def test_branch_manager_can_access_every_workflow():
@@ -23,3 +24,7 @@ def test_circulation_staff_can_only_access_overdue_chase():
     assert role_can_access_workflow("circulation_staff", "overdue_chase") is True
     assert role_can_access_workflow("circulation_staff", "room_booking") is False
     assert role_can_access_workflow("circulation_staff", "ill_routing") is False
+
+
+def test_workflow_owning_role_has_an_entry_for_every_workflow_enum_value():
+    assert set(WORKFLOW_OWNING_ROLE) == {w.value for w in Workflow}

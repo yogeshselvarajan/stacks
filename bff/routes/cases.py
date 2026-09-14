@@ -43,7 +43,7 @@ class CreateIllRequestBody(BaseModel):
 
 @router.post(
     "/api/ill-requests",
-    dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit), Depends(require_ill_access)],
+    dependencies=[Depends(require_ill_access), Depends(verify_csrf), Depends(enforce_case_creation_rate_limit)],
 )
 async def create_ill_request(
     body: CreateIllRequestBody,
@@ -132,7 +132,7 @@ class CreateOverdueCaseBody(BaseModel):
 
 @router.post(
     "/api/overdue-cases",
-    dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit), Depends(require_overdue_access)],
+    dependencies=[Depends(require_overdue_access), Depends(verify_csrf), Depends(enforce_case_creation_rate_limit)],
 )
 async def create_overdue_case(
     body: CreateOverdueCaseBody,
@@ -236,7 +236,7 @@ class CreateBookingBody(BaseModel):
 
 @router.post(
     "/api/bookings",
-    dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit), Depends(require_room_booking_access)],
+    dependencies=[Depends(require_room_booking_access), Depends(verify_csrf), Depends(enforce_case_creation_rate_limit)],
 )
 async def create_booking(
     body: CreateBookingBody,
