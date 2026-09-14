@@ -23,6 +23,7 @@ from strands.session.s3_session_manager import S3SessionManager
 from stacks.agent import build_stacks_agent
 from stacks.data.dynamodb_repository import DynamoDBLibraryDataRepository
 from stacks.hitl.dynamodb_pending_approvals import DynamoDBPendingApprovalsSink
+from stacks.hooks.dynamodb_audit_log import DynamoDBAuditLogSink
 from stacks.identity.claims import StaffIdentityClaims
 from stacks.memory.agentcore_store import AgentCoreMemoryStore
 from stacks.sequencer.overdue_sequencer import OverdueSequencer
@@ -52,10 +53,27 @@ def invoke(payload: dict) -> dict:
     return _run_chat(payload)
 
 
+_SUCCESS_TOOL_OUTCOMES = {"committed", "no_match_recorded"}
+
+
+def _all_audit_records(audit_sink, library_id: str) -> list:
+    """DynamoDBAuditLogSink.all(library_id) requires library_id (a real,
+    shared table); the in-memory AuditLogSink.all() takes no argument at
+    all, already implicitly scoped to one process's own sink instance --
+    mirrors bff/routes/reads.py's own _audit_all_for_library shim exactly,
+    since this is the same "two sink shapes, one call site" problem."""
+    import inspect
+
+    if len(inspect.signature(audit_sink.all).parameters) == 0:
+        return audit_sink.all()
+    return audit_sink.all(library_id)
+
+
 def _run_chat(payload: dict) -> dict:
     claims = _claims_from_payload(payload)
     session_id = payload["session_id"]
     pending_approvals_sink = DynamoDBPendingApprovalsSink(region=_REGION, environment=_ENVIRONMENT)
+    audit_sink = DynamoDBAuditLogSink(region=_REGION, environment=_ENVIRONMENT)
     session_manager = (
         S3SessionManager(session_id=session_id, bucket=_SESSION_BUCKET, region_name=_REGION)
         if _SESSION_BUCKET else None
@@ -64,6 +82,7 @@ def _run_chat(payload: dict) -> dict:
         _repo, claims, session_id=session_id,
         now=lambda: datetime.now(timezone.utc), memory=_memory,
         pending_approvals_sink=pending_approvals_sink, session_manager=session_manager,
+        audit_sink=audit_sink,
     )
     result = bundle.agent(payload["prompt"])
     # I1 (Task 17 fix round): the BFF's write/resume endpoint needs to
@@ -71,19 +90,29 @@ def _run_chat(payload: dict) -> dict:
     # the PendingApprovals row and reports success -- stop_reason alone
     # cannot distinguish "committed" from "blocked_missing_approval"
     # (both finish the agent loop normally, not with stop_reason ==
-    # "interrupt"). audit_sink is a brand-new AuditLogSink() built fresh
-    # by build_stacks_agent for this single invocation only (see
-    # stacks/agent.py), so filtering it by tool name carries no
-    # cross-request/cross-tenant risk. getattr guards test doubles (e.g.
+    # "interrupt"). getattr guards test doubles (e.g.
     # tests/unit/test_main_entrypoint_wiring.py's _StubBundle) that don't
     # define audit_sink at all.
-    audit_sink = getattr(bundle, "audit_sink", None)
+    #
+    # Found live, 2026-09-14: a real Nova Lite invocation sometimes calls
+    # the same tool an extra, redundant time after a genuine commit
+    # already succeeded (e.g. re-checking route_ill_request after it was
+    # already routed, which the tool correctly reports as an
+    # "already_routed" error). Scoping to this invocation's own
+    # session_id and preferring any real success outcome over a later,
+    # merely-redundant error fixes a real false "needs_attention" report
+    # on a request that had, in fact, already completed.
+    result_bundle_audit_sink = getattr(bundle, "audit_sink", None)
     tool_outcome = None
     tool_name = payload.get("tool")
-    if tool_name and audit_sink is not None:
-        matching = [r for r in audit_sink.all() if r.tool_name == tool_name]
+    if tool_name and result_bundle_audit_sink is not None:
+        matching = [
+            r for r in _all_audit_records(result_bundle_audit_sink, claims.library_id)
+            if r.tool_name == tool_name and r.session_id == session_id
+        ]
         if matching:
-            tool_outcome = matching[-1].outcome
+            success = next((r for r in matching if r.outcome in _SUCCESS_TOOL_OUTCOMES), None)
+            tool_outcome = success.outcome if success is not None else matching[-1].outcome
     return {
         "message": str(result.message),
         "stop_reason": getattr(result, "stop_reason", None),
@@ -97,12 +126,14 @@ def _run_overdue_sweep(payload: dict) -> dict:
 
     claims = StaffIdentityClaims(role="circulation_staff", library_id=payload["library_id"], case_review_role=None)
     pending_approvals_sink = DynamoDBPendingApprovalsSink(region=_REGION, environment=_ENVIRONMENT)
+    audit_sink = DynamoDBAuditLogSink(region=_REGION, environment=_ENVIRONMENT)
 
     def agent_factory(session_id: str):
         session_manager = S3SessionManager(session_id=session_id, bucket=_SESSION_BUCKET, region_name=_REGION)
         bundle = build_stacks_agent(
             _repo, claims, session_id=session_id, memory=_memory,
             pending_approvals_sink=pending_approvals_sink, session_manager=session_manager,
+            audit_sink=audit_sink,
         )
         return bundle.agent
 

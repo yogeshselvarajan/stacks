@@ -259,6 +259,43 @@ def test_build_stacks_agent_threads_pending_approvals_sink_to_the_hitl_gate(monk
     assert hitl_gate_hooks[0]._session_id == "sess_pa"
 
 
+def test_build_stacks_agent_with_no_audit_sink_builds_its_own_ephemeral_one(monkeypatch):
+    """Every existing caller and test omits audit_sink -- must keep
+    working exactly as before (a fresh, in-memory AuditLogSink the caller
+    can inspect via bundle.audit_sink)."""
+    from stacks.hooks.audit_log import AuditLogSink
+
+    bundle = _build_bundle(monkeypatch)
+    assert isinstance(bundle.audit_sink, AuditLogSink)
+
+
+def test_build_stacks_agent_threads_a_passed_audit_sink_into_the_hook_instead_of_building_one(monkeypatch):
+    """main.py's real entrypoint must be able to pass a persistent
+    DynamoDBAuditLogSink and have AuditLogHook actually write to it --
+    found live, 2026-09-14: without this, every real tool commit's audit
+    record was built correctly then discarded, since build_stacks_agent
+    always built its own fresh, ephemeral sink no caller could reach."""
+    from stacks.hooks.audit_log import AuditLogHook, AuditLogSink
+    from strands.hooks import AfterToolCallEvent
+
+    passed_sink = AuditLogSink()
+    repo = InMemoryLibraryDataRepository()
+    seed_demo_library(repo, library_id="lib_demo")
+    claims = StaffIdentityClaims(role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review")
+    if not os.environ.get("RUN_LIVE_BEDROCK_TESTS") and not os.environ.get("STACKS_BEDROCK_MODEL_ID"):
+        monkeypatch.setenv("STACKS_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+
+    bundle = build_stacks_agent(repo, claims, session_id="sess_audit", audit_sink=passed_sink)
+
+    assert bundle.audit_sink is passed_sink
+    audit_hooks = [
+        cb.__self__ for cb in bundle.agent.hooks._registered_callbacks.get(AfterToolCallEvent, [])
+        if isinstance(cb.__self__, AuditLogHook)
+    ]
+    assert len(audit_hooks) == 1
+    assert audit_hooks[0]._sink is passed_sink
+
+
 @pytest.mark.skipif(
     not os.environ.get("RUN_LIVE_BEDROCK_TESTS"),
     reason="Requires real AWS credentials and Bedrock model access. Set RUN_LIVE_BEDROCK_TESTS=1 to run.",

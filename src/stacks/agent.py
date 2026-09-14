@@ -87,6 +87,7 @@ def build_stacks_agent(
     memory: MemoryStore | None = None,
     pending_approvals_sink: PendingApprovalsSink | None = None,
     session_manager: SessionManager | None = None,
+    audit_sink: AuditLogSink | None = None,
 ) -> StacksAgentBundle:
     """Builds one Stacks Agent scoped to one library tenant and one session.
 
@@ -107,6 +108,19 @@ def build_stacks_agent(
     normal case on every AgentCore Runtime invocation) has no way to
     resume a paused interrupt from a prior invocation -- Task 5's main.py
     is the first real caller to pass both.
+
+    audit_sink defaults to None (a fresh, ephemeral, in-memory AuditLogSink
+    built below) for the same reason: every existing caller and test that
+    constructs one bundle per invocation and inspects bundle.audit_sink
+    itself keeps working unmodified. main.py's real entrypoint is the one
+    caller that must pass a real, persistent DynamoDBAuditLogSink instead
+    -- without it, every real tool commit's audit record is built
+    correctly by AuditLogHook but discarded the moment the invocation
+    ends, since a fresh AgentCore Runtime invocation is a fresh process
+    with no other reference to it. Found live, 2026-09-14: the real
+    Stacks-AuditLog-dev table had zero genuine agent-tool-call records for
+    lib_demo despite real, successful room-booking/ILL/overdue commits
+    already having happened through the deployed system.
     """
     library_id = claims.library_id
     memory = memory if memory is not None else InMemoryMemoryStore()
@@ -121,7 +135,7 @@ def build_stacks_agent(
     # specialist actually ran (whole-branch review Critical 1).
     ill_disambiguation_cache = EvaluationCache()
     tier_ledger = TierLedger()
-    audit_sink = AuditLogSink()
+    audit_sink = audit_sink if audit_sink is not None else AuditLogSink()
     notification_sink = NotificationSink()
 
     get_library_data = make_get_library_data(repo, library_id)
