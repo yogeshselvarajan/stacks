@@ -110,6 +110,21 @@ describe("NewIllRequestForm", () => {
     expect(await screen.findByText(/could not process it yet/i)).toBeInTheDocument();
   });
 
+  it("shows a needs-attention message when the case is created but not completed automatically", async () => {
+    vi.mocked(illQueueApi.createIllRequest).mockResolvedValue({
+      illRequestId: "ill_needs1", status: "needs_attention", outcome: "blocked_missing_approval",
+    });
+    render(<NewIllRequestForm />);
+    fireEvent.click(screen.getByRole("button", { name: /new request/i }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Middlemarch" } });
+    fireEvent.change(screen.getByLabelText("Requester patron ID"), { target: { value: "patron_x" } });
+    fireEvent.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(
+      await screen.findByText(/could not complete it automatically.*check the ill queue/i)
+    ).toBeInTheDocument();
+  });
+
   it("resets the draft fields when Cancel is clicked, unlike a stale reopen", () => {
     render(<NewIllRequestForm />);
     fireEvent.click(screen.getByRole("button", { name: /new request/i }));

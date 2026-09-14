@@ -38,6 +38,9 @@ class InMemoryLibraryDataRepository:
     def save_ill_request(self, request: ILLRequestRecord) -> None:
         self._ill_requests[(request.library_id, request.ill_request_id)] = request
 
+    def delete_ill_request(self, library_id: LibraryId, ill_request_id: ILLRequestId) -> None:
+        self._ill_requests.pop((library_id, ill_request_id), None)
+
     def list_ill_requests(self, library_id: LibraryId) -> list[ILLRequestRecord]:
         return [r for (lib, _), r in self._ill_requests.items() if lib == library_id]
 

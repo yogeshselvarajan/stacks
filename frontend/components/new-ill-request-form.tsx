@@ -59,6 +59,10 @@ export function NewIllRequestForm({ onCreated }: { onCreated?: () => void }) {
           </p>
         ) : result.status === "resolved" ? (
           <p style={{ color: "var(--color-ink)" }}>Resolved automatically. No human review was needed.</p>
+        ) : result.status === "needs_attention" ? (
+          <p style={{ color: "var(--color-tier-red-text)" }}>
+            Case created, but Stacks could not complete it automatically. A team member should check the ILL Queue.
+          </p>
         ) : (
           <p style={{ color: "var(--color-tier-red-text)" }}>
             Case created, but Stacks could not process it yet. Try again shortly.

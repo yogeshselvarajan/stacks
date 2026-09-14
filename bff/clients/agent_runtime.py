@@ -39,9 +39,17 @@ class BedrockAgentCoreRuntimeClient:
 
     def __init__(self, region: str, agent_runtime_arn: str, boto_session=None) -> None:
         import boto3
+        from botocore.config import Config
 
         session = boto_session or boto3.Session(region_name=region)
-        self._client = session.client("bedrock-agentcore", region_name=region)
+        # I3 (final review fix round): retries disabled (max_attempts=1).
+        # botocore's default retry behavior on a slow/failed call would
+        # silently re-send the same invocation, risking a duplicate agent
+        # run (e.g. a second commit of the same routing decision) -- a
+        # single clean, fast failure surfaced to the caller is safer than
+        # an invisible retry here.
+        config = Config(read_timeout=90, connect_timeout=10, retries={"max_attempts": 1})
+        self._client = session.client("bedrock-agentcore", region_name=region, config=config)
         self._agent_runtime_arn = agent_runtime_arn
 
     def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:

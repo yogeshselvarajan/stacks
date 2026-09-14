@@ -62,6 +62,13 @@ _read_limiter = RateLimiter(max_requests=120, window_seconds=60)
 # session yet at login time.
 _login_limiter = RateLimiter(max_requests=10, window_seconds=60)
 
+# Case creation triggers a real, billed agent invocation (unlike an
+# approval decision, which only resumes one already in flight), so this
+# budget is intentionally tighter than _approval_limiter's and kept as its
+# own dedicated limiter -- a burst of new-request submissions must not be
+# able to lock staff out of approving already-pending cases.
+_case_creation_limiter = RateLimiter(max_requests=10, window_seconds=60)
+
 
 def get_approval_rate_limiter() -> RateLimiter:
     return _approval_limiter
@@ -73,6 +80,10 @@ def get_read_rate_limiter() -> RateLimiter:
 
 def get_login_rate_limiter() -> RateLimiter:
     return _login_limiter
+
+
+def get_case_creation_rate_limiter() -> RateLimiter:
+    return _case_creation_limiter
 
 
 def enforce_approval_rate_limit(
@@ -95,3 +106,10 @@ def enforce_login_rate_limit(
 ) -> None:
     key = request.client.host if request.client else "unknown"
     limiter.check(key)
+
+
+def enforce_case_creation_rate_limit(
+    claims: StaffIdentityClaims = Depends(get_current_claims),
+    limiter: RateLimiter = Depends(get_case_creation_rate_limiter),
+) -> None:
+    limiter.check(f"{claims.library_id}:{claims.role}")

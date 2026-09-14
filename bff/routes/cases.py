@@ -25,7 +25,7 @@ from stacks.types import AuditActor
 from bff.clients.agent_runtime import AgentRuntimeClient
 from bff.csrf import verify_csrf
 from bff.deps import get_agent_runtime_client, get_audit_sink, get_current_claims, get_repo
-from bff.rate_limit import enforce_approval_rate_limit
+from bff.rate_limit import enforce_case_creation_rate_limit
 
 router = APIRouter()
 
@@ -40,7 +40,7 @@ class CreateIllRequestBody(BaseModel):
 
 @router.post(
     "/api/ill-requests",
-    dependencies=[Depends(verify_csrf), Depends(enforce_approval_rate_limit)],
+    dependencies=[Depends(verify_csrf), Depends(enforce_case_creation_rate_limit)],
 )
 async def create_ill_request(
     body: CreateIllRequestBody,
@@ -95,12 +95,25 @@ async def create_ill_request(
         agent_response = await run_in_threadpool(agent_runtime_client.invoke, invoke_payload)
     except Exception:
         logger.exception("ill_request_agent_invocation_failed")
+        # I1 (final review fix round): a case whose agent invocation itself
+        # failed must not be left as a permanently orphaned record --
+        # there is no future retry path that reuses this id (each new
+        # "New request" submission always mints a fresh one), so leaving
+        # it here would silently strand it forever, invisible to the ILL
+        # Queue and unreachable by any workflow.
+        await run_in_threadpool(repo.delete_ill_request, claims.library_id, ill_request_id)
         return {"illRequestId": ill_request_id, "status": "agent_invocation_failed", "outcome": None}
 
     if agent_response.get("stop_reason") == "interrupt":
         return {"illRequestId": ill_request_id, "status": "pending_approval", "outcome": None}
-    return {
-        "illRequestId": ill_request_id,
-        "status": "resolved",
-        "outcome": agent_response.get("tool_outcome"),
-    }
+
+    # C1 (final review fix round): mirror approvals.py's own rule (lines
+    # 98-105 there) exactly -- a non-interrupt stop_reason is not itself
+    # proof the routing actually committed. Only report "resolved" when
+    # the tool's own outcome says so; any other outcome (a blocked/
+    # no-match/unrecognized result, or none at all) must surface as a
+    # case that still needs a human to look at it, not a false success.
+    outcome = agent_response.get("tool_outcome")
+    if outcome == "committed":
+        return {"illRequestId": ill_request_id, "status": "resolved", "outcome": outcome}
+    return {"illRequestId": ill_request_id, "status": "needs_attention", "outcome": outcome}

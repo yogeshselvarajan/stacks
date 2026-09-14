@@ -18,7 +18,13 @@ from fastapi.testclient import TestClient
 
 from bff.csrf import verify_csrf
 from bff.main import app
-from bff.rate_limit import RateLimiter, get_approval_rate_limiter, get_login_rate_limiter, get_read_rate_limiter
+from bff.rate_limit import (
+    RateLimiter,
+    get_approval_rate_limiter,
+    get_case_creation_rate_limiter,
+    get_login_rate_limiter,
+    get_read_rate_limiter,
+)
 
 
 @pytest.fixture
@@ -32,8 +38,10 @@ def _permissive_security_controls():
     app.dependency_overrides[get_approval_rate_limiter] = lambda: RateLimiter(max_requests=10_000, window_seconds=60)
     app.dependency_overrides[get_read_rate_limiter] = lambda: RateLimiter(max_requests=10_000, window_seconds=60)
     app.dependency_overrides[get_login_rate_limiter] = lambda: RateLimiter(max_requests=10_000, window_seconds=60)
+    app.dependency_overrides[get_case_creation_rate_limiter] = lambda: RateLimiter(max_requests=10_000, window_seconds=60)
     yield
     app.dependency_overrides.pop(verify_csrf, None)
     app.dependency_overrides.pop(get_approval_rate_limiter, None)
     app.dependency_overrides.pop(get_read_rate_limiter, None)
     app.dependency_overrides.pop(get_login_rate_limiter, None)
+    app.dependency_overrides.pop(get_case_creation_rate_limiter, None)

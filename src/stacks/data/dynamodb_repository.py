@@ -67,6 +67,9 @@ class DynamoDBLibraryDataRepository:
     def save_ill_request(self, request: ILLRequestRecord) -> None:
         self._ill_requests.put_item(Item=request.model_dump(mode="json"))
 
+    def delete_ill_request(self, library_id: LibraryId, ill_request_id: ILLRequestId) -> None:
+        self._ill_requests.delete_item(Key={"library_id": library_id, "ill_request_id": ill_request_id})
+
     def list_ill_requests(self, library_id: LibraryId) -> list[ILLRequestRecord]:
         """library_id is the ILLRequests table's own partition key (see
         get_ill_request's Key= above), so a plain query on it returns every

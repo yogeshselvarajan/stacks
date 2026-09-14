@@ -13,7 +13,7 @@ export interface CreateIllRequestInput {
 
 export interface CreateIllRequestResult {
   illRequestId: string;
-  status: "pending_approval" | "resolved" | "agent_invocation_failed";
+  status: "pending_approval" | "resolved" | "needs_attention" | "agent_invocation_failed";
   outcome: string | null;
 }
 

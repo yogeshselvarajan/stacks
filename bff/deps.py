@@ -92,5 +92,11 @@ def get_audit_sink() -> AuditLogSink:
 def get_agent_runtime_client() -> AgentRuntimeClient:
     global _agent_runtime_client
     if _agent_runtime_client is None:
+        # I2 (final review fix round): fail fast with a clear message
+        # instead of constructing a client against an empty ARN, which
+        # would otherwise surface as a confusing AWS API error on the
+        # first real invocation rather than at configuration time.
+        if not AGENT_RUNTIME_ARN:
+            raise RuntimeError("STACKS_AGENT_RUNTIME_ARN is not configured")
         _agent_runtime_client = BedrockAgentCoreRuntimeClient(region=REGION, agent_runtime_arn=AGENT_RUNTIME_ARN)
     return _agent_runtime_client

@@ -6,8 +6,10 @@ from stacks.hooks.audit_log import AuditLogSink
 from stacks.identity.claims import StaffIdentityClaims
 
 from bff.clients.agent_runtime import FakeAgentRuntimeClient
+from bff.csrf import verify_csrf
 from bff.deps import get_agent_runtime_client, get_audit_sink, get_current_claims, get_repo
 from bff.main import app
+from bff.rate_limit import RateLimiter, get_case_creation_rate_limiter
 
 
 @pytest.fixture
@@ -102,6 +104,66 @@ def test_returns_resolved_when_the_agent_commits_without_interrupt(wired):
     body = response.json()
     assert body["status"] == "resolved"
     assert body["outcome"] == "committed"
+
+
+def test_returns_needs_attention_when_the_tool_outcome_is_not_committed(wired):
+    # C1 (final review fix round): a non-interrupt stop_reason is not
+    # itself proof the routing committed. blocked_missing_approval paired
+    # with stop_reason="end_turn" must surface as needs_attention, not a
+    # false "resolved".
+    client, repo, audit_sink, fake_client = wired
+    fake_client._response = {"status": "ok", "stop_reason": "end_turn", "tool_outcome": "blocked_missing_approval"}
+    response = client.post("/api/ill-requests", json=_body())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_attention"
+    assert body["outcome"] == "blocked_missing_approval"
+
+
+def test_agent_invocation_failure_cleans_up_the_orphaned_ill_request_record(wired):
+    # I1 (final review fix round): a case whose agent invocation raises
+    # must not be left as a permanently orphaned record with no way to
+    # ever process it again.
+    client, repo, audit_sink, fake_client = wired
+
+    def _raise(payload):
+        raise RuntimeError("boom")
+
+    fake_client.invoke = _raise
+    response = client.post("/api/ill-requests", json=_body())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "agent_invocation_failed"
+    assert repo.get_ill_request("lib_demo", body["illRequestId"]) is None
+
+
+def test_the_case_creation_endpoint_trips_429_once_its_configured_limit_is_exceeded(wired):
+    # I4/I5: this route now has its own dedicated limiter, separate from
+    # the approval-decision endpoint's, so a burst of new-request
+    # submissions cannot lock staff out of approving already-pending
+    # cases. Mirrors test_security_controls.py's own approval-endpoint
+    # rate-limit test pattern exactly.
+    client, repo, audit_sink, fake_client = wired
+    limiter = RateLimiter(max_requests=2, window_seconds=60)
+    app.dependency_overrides[get_case_creation_rate_limiter] = lambda: limiter
+    try:
+        statuses = [client.post("/api/ill-requests", json=_body()).status_code for _ in range(3)]
+    finally:
+        app.dependency_overrides.pop(get_case_creation_rate_limiter, None)
+
+    assert statuses == [200, 200, 429]
+
+
+def test_creating_a_case_without_a_csrf_cookie_or_header_is_rejected(wired):
+    # I5: neither CSRF nor rate-limit enforcement had any test coverage
+    # for this route -- conftest.py's autouse fixture disables both for
+    # every test, so this re-enables the real CSRF check for this one
+    # test, mirroring test_security_controls.py's own pattern for the
+    # approval-decision endpoint.
+    client, repo, audit_sink, fake_client = wired
+    app.dependency_overrides.pop(verify_csrf, None)
+    response = client.post("/api/ill-requests", json=_body())
+    assert response.status_code == 403
 
 
 def test_rejects_an_empty_title_with_422_and_never_invokes_the_agent(wired):
