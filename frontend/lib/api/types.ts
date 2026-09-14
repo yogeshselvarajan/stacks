@@ -69,3 +69,22 @@ export async function bffFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
   return response.json() as Promise<T>;
 }
+
+// Double-submit CSRF cookie (bff/csrf.py): the BFF issues this cookie,
+// readable by JS on purpose, on login. Every mutating request must echo
+// its value back as a header the BFF compares against the cookie it
+// received on the same request -- a cross-site form can't read this
+// cookie to also set the header, so it can't produce a match.
+const CSRF_COOKIE_NAME = "stacks_csrf";
+const CSRF_HEADER_NAME = "X-Stacks-CSRF-Token";
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+export function csrfHeaders(): Record<string, string> {
+  const token = readCookie(CSRF_COOKIE_NAME);
+  return token ? { [CSRF_HEADER_NAME]: token } : {};
+}

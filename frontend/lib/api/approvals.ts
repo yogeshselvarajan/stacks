@@ -1,5 +1,5 @@
 // frontend/lib/api/approvals.ts
-import { ApprovalCase, bffFetch } from "./types";
+import { ApprovalCase, bffFetch, csrfHeaders } from "./types";
 
 export function getApprovals(): Promise<ApprovalCase[]> {
   return bffFetch<ApprovalCase[]>("/api/approvals");
@@ -14,7 +14,7 @@ export type Decision = { action: "approve" | "decline" | "edit"; editedValue?: s
 export function submitDecision(caseId: string, decision: Decision): Promise<{ status: string }> {
   return bffFetch<{ status: string }>(`/api/approvals/${encodeURIComponent(caseId)}/decision`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...csrfHeaders() },
     body: JSON.stringify(decision),
   });
 }

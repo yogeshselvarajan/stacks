@@ -16,7 +16,9 @@ from pydantic import BaseModel
 from stacks.identity.claims import StaffIdentityClaims
 
 from bff.config import COGNITO_APP_CLIENT_ID, REGION, SESSION_COOKIE_NAME
+from bff.csrf import CSRF_COOKIE_NAME, generate_csrf_token
 from bff.deps import get_current_claims
+from bff.rate_limit import enforce_login_rate_limit
 from fastapi import Depends
 
 router = APIRouter()
@@ -33,7 +35,7 @@ class SessionResponse(BaseModel):
     caseReviewRole: str | None
 
 
-@router.post("/api/auth/login")
+@router.post("/api/auth/login", dependencies=[Depends(enforce_login_rate_limit)])
 def login(body: LoginRequest, response: Response) -> dict:
     client = boto3.client("cognito-idp", region_name=REGION)
     try:
@@ -49,6 +51,12 @@ def login(body: LoginRequest, response: Response) -> dict:
     expires_in = result["AuthenticationResult"]["ExpiresIn"]
     response.set_cookie(
         key=SESSION_COOKIE_NAME, value=id_token, httponly=True, secure=True,
+        samesite="Strict", max_age=expires_in,
+    )
+    # Not HttpOnly: the frontend must be able to read this value in order
+    # to echo it back as the X-Stacks-CSRF-Token header (bff/csrf.py).
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME, value=generate_csrf_token(), httponly=False, secure=True,
         samesite="Strict", max_age=expires_in,
     )
     return {"status": "ok"}

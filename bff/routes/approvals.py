@@ -19,7 +19,9 @@ from stacks.hitl.pending_approvals import PendingApprovalsSink
 from stacks.identity.claims import StaffIdentityClaims
 
 from bff.clients.agent_runtime import AgentRuntimeClient
+from bff.csrf import verify_csrf
 from bff.deps import get_agent_runtime_client, get_current_claims, get_pending_approvals_sink
+from bff.rate_limit import enforce_approval_rate_limit
 
 router = APIRouter()
 
@@ -30,7 +32,10 @@ class DecisionRequest(BaseModel):
     declineReason: str | None = None
 
 
-@router.post("/api/approvals/{case_id}/decision")
+@router.post(
+    "/api/approvals/{case_id}/decision",
+    dependencies=[Depends(verify_csrf), Depends(enforce_approval_rate_limit)],
+)
 async def submit_decision(
     case_id: str,
     body: DecisionRequest,

@@ -21,6 +21,7 @@ from stacks.memory.store import MemoryStore
 
 from bff.deps import get_audit_sink, get_current_claims, get_memory, get_pending_approvals_sink, get_repo
 from bff.display_names import item_title, patron_name, room_name
+from bff.rate_limit import enforce_read_rate_limit
 
 
 def _ill_recall_summary(memory: MemoryStore | None, library_id: str, requester_patron_id: str) -> str | None:
@@ -45,7 +46,7 @@ def _overdue_recall_summary(memory: MemoryStore | None, library_id: str, patron_
         return None
     return f"Hardship flag on file since {fact.flagged_at.date().isoformat()}."
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(enforce_read_rate_limit)])
 
 # LibraryDataRepository has no "list every room" method -- Plan 3's own
 # scope note names the Spaces table as provisioned but deliberately unread
