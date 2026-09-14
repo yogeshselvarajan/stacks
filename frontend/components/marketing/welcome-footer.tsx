@@ -74,8 +74,12 @@ export function WelcomeFooter() {
             </ul>
           </div>
 
+          <p className="mt-8 text-xs" style={{ color: "var(--color-ink-faint)" }}>
+            Working prototype on real AWS infrastructure, running against a synthetic library dataset.
+          </p>
+
           <div
-            className="mt-8 flex flex-col gap-3 border-t pt-6 text-sm sm:flex-row sm:items-center sm:justify-between"
+            className="mt-3 flex flex-col gap-3 border-t pt-6 text-sm sm:flex-row sm:items-center sm:justify-between"
             style={{ borderColor: "var(--color-border)", color: "var(--color-ink-faint)" }}
           >
             <p>Stacks · Good Neighbor Agents, Agents for Humans hackathon</p>

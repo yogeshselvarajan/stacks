@@ -61,6 +61,48 @@ def test_get_approvals_returns_the_pending_case_scoped_to_the_callers_library(wi
     assert body[0]["workflow"] == "room_booking"
 
 
+def test_get_approvals_has_no_policy_clause_when_the_reason_carries_none(wired_client):
+    # The wired_client fixture's record has reason={"tier": "RED"} -- no
+    # policy_clause key at all, matching a record raised before this
+    # field existed (or a workflow whose evaluate found no applicable
+    # clause). Must degrade to None, not KeyError.
+    response = wired_client.get("/api/approvals")
+    assert response.json()[0]["policyClause"] is None
+
+
+def test_get_approval_case_surfaces_the_cited_policy_clause(monkeypatch):
+    from stacks.hitl.pending_approvals import InMemoryPendingApprovalsSink, PendingApprovalRecord
+
+    repo = InMemoryLibraryDataRepository()
+    seed_demo_library(repo, library_id="lib_demo")
+    sink = InMemoryPendingApprovalsSink()
+    sink.put(PendingApprovalRecord(
+        library_id="lib_demo", case_id="b_recurring_b:b_walkin_b", tier="RED", tool="resolve_room_conflict",
+        workflow="room_booking", interrupt_id="v1:x", session_id="s1", created_at="2026-09-06T00:00:00+00:00",
+        reason={
+            "tier": "RED", "tool": "resolve_room_conflict", "workflow": "room_booking",
+            "case_id": "b_recurring_b:b_walkin_b",
+            "policy_clause": {"clause_id": "RBP-1", "clause_text": "A recurring, library-run program outranks a one-off renter or walk-in booking for the same slot."},
+        },
+    ))
+    app.dependency_overrides[get_current_claims] = lambda: StaffIdentityClaims(
+        role="branch_manager", library_id="lib_demo", case_review_role="librarian_case_review"
+    )
+    app.dependency_overrides[get_repo] = lambda: repo
+    app.dependency_overrides[get_pending_approvals_sink] = lambda: sink
+    try:
+        client = TestClient(app)
+        response = client.get("/api/approvals/b_recurring_b:b_walkin_b")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["policyClause"] == {
+        "clauseId": "RBP-1",
+        "clauseText": "A recurring, library-run program outranks a one-off renter or walk-in booking for the same slot.",
+    }
+
+
 def test_get_approvals_never_returns_a_case_for_a_different_library(wired_client):
     from bff.deps import get_current_claims
     app.dependency_overrides[get_current_claims] = lambda: StaffIdentityClaims(

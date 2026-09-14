@@ -145,6 +145,16 @@ class HitlGateHook(HookProvider):
                 None,
             )
 
+            # Only ever populated on the first (raising) pass below --
+            # a resume takes the branch just below instead, and never
+            # revisits the cache the reason dict's policy_clause reads
+            # from (see the comment above on why that cache is always
+            # cold on resume). Left None here is correct on resume:
+            # the interrupt's already-persisted reason (from the raise)
+            # is what a human ever actually sees, not this call's own
+            # throwaway reason argument.
+            evaluation: dict[str, Any] | None = None
+
             if resuming_interrupt is not None:
                 tier = Tier(resuming_interrupt.reason["tier"])
             else:
@@ -193,9 +203,17 @@ class HitlGateHook(HookProvider):
             return
 
         try:
+            # The cited policy clause, when this workflow's evaluate
+            # response carries one -- surfaced so a human reviewer (and,
+            # via the BFF, the Approval Inbox UI) can see exactly which
+            # rule the agent applied, not just that a tier was assigned.
+            applicable_clause = evaluation.get("applicable_policy_clause") if evaluation else None
             response = event.interrupt(
                 interrupt_name,
-                reason={"tier": tier.value, "tool": tool_name, "workflow": workflow.value, "case_id": case_id},
+                reason={
+                    "tier": tier.value, "tool": tool_name, "workflow": workflow.value, "case_id": case_id,
+                    "policy_clause": applicable_clause,
+                },
             )
             if not isinstance(response, dict) or not response.get("approved"):
                 event.cancel_tool = f"blocked_missing_approval: tier={tier.value}"

@@ -10,6 +10,7 @@ export const APPROVAL_CASES_FIXTURE: ApprovalCase[] = [
     caseId: "b_recurring_b:b_walkin_b", workflow: "room_booking", tier: "RED", tool: "resolve_room_conflict",
     summary: "Room 204, Thursday 2-4pm: recurring Book Club vs. one-off community meeting.",
     ageMinutes: 14, candidates: [{ id: "b_recurring_b", label: "Book Club (recurring)" }, { id: "b_walkin_b", label: "Community meeting (one-off)" }],
+    policyClause: { clauseId: "RBP-1", clauseText: "A recurring, library-run program outranks a one-off renter or walk-in booking for the same slot." },
   },
   {
     caseId: "ill_req_123", workflow: "ill_routing", tier: "YELLOW", tool: "route_ill_request",

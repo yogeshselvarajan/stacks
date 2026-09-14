@@ -11,6 +11,7 @@ export interface ApprovalCase {
   ageMinutes: number;
   candidates?: { id: string; label: string }[];
   recallSummary?: string;
+  policyClause?: { clauseId: string; clauseText: string } | null;
 }
 
 export interface CalendarBooking {

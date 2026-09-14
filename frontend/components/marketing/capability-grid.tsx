@@ -11,7 +11,7 @@ const CAPABILITIES = [
   {
     Icon: Split,
     title: "ILL Disambiguation Specialist",
-    body: "A dedicated agent that narrows an ambiguous interlibrary-loan request to a single confident candidate before the main agent ever commits.",
+    body: "A dedicated agent that narrows an ambiguous interlibrary-loan request to a single confident candidate. The main agent cannot claim convergence unless it actually happened. That claim is verified in code, not asserted in a prompt.",
     badge: "Amazon Bedrock, agents-as-tools",
   },
   {

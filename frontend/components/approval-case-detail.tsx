@@ -8,7 +8,7 @@ type ActionStatus = "idle" | "submitting" | "error";
 
 const WHY_THIS_NEEDS_REVIEW: Record<ApprovalCase["tier"], string> = {
   RED: "This action affects a sensitive record or an external recipient and cannot be automated. A qualified reviewer must decide before anything commits.",
-  YELLOW: "Stacks prepared this action and is waiting for your confirmation before it commits.",
+  YELLOW: "Stacks resolved this case and prepared the action. It needs your confirmation before it commits.",
   GREEN: "Stacks resolved this automatically. It is shown here only for reference.",
 };
 
@@ -59,6 +59,17 @@ export function ApprovalCaseDetail({
         <p className="text-sm" style={{ color: "var(--color-ink)" }}>{theCase.summary}</p>
       </div>
 
+      {theCase.policyClause && (
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={EYEBROW_STYLE}>Policy applied</p>
+          <p className="text-sm" style={{ color: "var(--color-ink-muted)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", color: "var(--color-ink)" }}>{theCase.policyClause.clauseId}</span>
+            {": "}
+            {theCase.policyClause.clauseText}
+          </p>
+        </div>
+      )}
+
       {theCase.tier === "YELLOW" && (
         <label
           data-testid="trust-mode-toggle"
@@ -68,18 +79,23 @@ export function ApprovalCaseDetail({
           <input
             type="checkbox"
             className="stacks-focus-ring transition-colors hover:brightness-90 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={submitting}
+            disabled
           />
-          Apply automatically for this tool for the rest of my session
+          Apply automatically for this tool for the rest of my session (coming soon)
         </label>
       )}
 
       {theCase.candidates && (
-        <ul className="list-inside list-disc text-sm" style={{ color: "var(--color-ink)" }}>
-          {theCase.candidates.map((candidate) => (
-            <li key={candidate.id}>{candidate.label}</li>
-          ))}
-        </ul>
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={EYEBROW_STYLE}>
+            {theCase.workflow === "ill_routing" ? "Considered and ruled out" : "Conflicting bookings"}
+          </p>
+          <ul className="list-inside list-disc text-sm" style={{ color: "var(--color-ink)" }}>
+            {theCase.candidates.map((candidate) => (
+              <li key={candidate.id}>{candidate.label}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {theCase.recallSummary && (

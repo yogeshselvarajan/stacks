@@ -114,11 +114,41 @@ describe("ApprovalCaseDetail", () => {
 
   it("explains a YELLOW case with its own distinct copy, not RED's", () => {
     render(<ApprovalCaseDetail case={YELLOW_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
-    expect(screen.getByText(/waiting for your confirmation/i)).toBeInTheDocument();
+    expect(screen.getByText(/needs your confirmation/i)).toBeInTheDocument();
   });
 
   it("shows the case id for reference", () => {
     render(<ApprovalCaseDetail case={RED_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
     expect(screen.getByText(`Case ${RED_CASE.caseId}`)).toBeInTheDocument();
+  });
+
+  it("shows the cited policy clause when the case carries one", () => {
+    render(<ApprovalCaseDetail case={RED_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
+    expect(screen.getByText("Policy applied")).toBeInTheDocument();
+    expect(screen.getByText(RED_CASE.policyClause!.clauseId)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(RED_CASE.policyClause!.clauseText))).toBeInTheDocument();
+  });
+
+  it("omits the policy section entirely when the case has no cited clause", () => {
+    render(<ApprovalCaseDetail case={YELLOW_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
+    expect(screen.queryByText("Policy applied")).toBeNull();
+  });
+
+  it("labels the candidate list as ruled-out options for an ILL case", () => {
+    const illCaseWithCandidates = { ...YELLOW_CASE, candidates: [{ id: "hold_2a", label: "Penguin Classics" }, { id: "hold_2b", label: "Oxford World's Classics" }] };
+    render(<ApprovalCaseDetail case={illCaseWithCandidates} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
+    expect(screen.getByText("Considered and ruled out")).toBeInTheDocument();
+  });
+
+  it("labels the candidate list as the conflicting bookings for a room-booking case", () => {
+    render(<ApprovalCaseDetail case={RED_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
+    expect(screen.getByText("Conflicting bookings")).toBeInTheDocument();
+  });
+
+  it("marks the trust-mode toggle as not yet available", () => {
+    render(<ApprovalCaseDetail case={YELLOW_CASE} onApprove={vi.fn()} onDecline={vi.fn()} onEdit={vi.fn()} actionStatus="idle" resolving={false} />);
+    const toggle = screen.getByTestId("trust-mode-toggle");
+    expect(toggle).toHaveTextContent(/coming soon/i);
+    expect(toggle.querySelector("input[type='checkbox']")).toBeDisabled();
   });
 });

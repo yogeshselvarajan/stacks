@@ -21,7 +21,7 @@ export function Hero() {
             style={{ borderColor: "var(--color-border)", color: "var(--color-ink-muted)", fontFamily: "var(--font-mono)" }}
           >
             <LiveDot />
-            Built on Amazon Bedrock AgentCore
+            A task-completion agent for library operations
           </span>
 
           <h1
@@ -35,6 +35,10 @@ export function Hero() {
             Stacks resolves room-booking conflicts, routes ambiguous interlibrary-loan
             requests, and chases overdue items, automatically when it&apos;s safe, and
             with a staff member in the loop whenever it isn&apos;t.
+          </p>
+
+          <p className="mt-3 max-w-xl text-base" style={{ color: "var(--color-ink-faint)" }}>
+            Your systems already flag the hard cases. Stacks is what works the queue they flag them into.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -56,7 +60,7 @@ export function Hero() {
           </div>
 
           <p className="mt-4 text-sm" style={{ color: "var(--color-ink-faint)" }}>
-            No setup for staff. Real Cognito sign-in, real AWS infrastructure underneath.
+            No setup for staff. Real Cognito sign-in, real AWS infrastructure underneath, built on Amazon Bedrock AgentCore.
           </p>
         </div>
 

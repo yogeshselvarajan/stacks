@@ -72,6 +72,18 @@ _ESCALATION_LADDER_LABELS = {
 }
 
 
+def _policy_clause_for(record) -> dict | None:
+    """The clause HitlGateHook cited when it raised this interrupt
+    (src/stacks/hitl/hitl_gate.py), read back from the record's own
+    reason dict -- None for records raised before this field existed,
+    or for a workflow whose evaluate found no applicable clause.
+    """
+    clause = (record.reason or {}).get("policy_clause")
+    if not clause:
+        return None
+    return {"clauseId": clause["clause_id"], "clauseText": clause["clause_text"]}
+
+
 def _summary_for_pending(record, repo: LibraryDataRepository) -> tuple[str, list[dict] | None]:
     if record.workflow == "room_booking":
         booking_ids = record.case_id.split(":")
@@ -103,6 +115,7 @@ async def get_approvals(
         cases.append({
             "caseId": r.case_id, "workflow": r.workflow, "tier": r.tier, "tool": r.tool,
             "summary": summary, "ageMinutes": max(age_minutes, 0), "candidates": candidates,
+            "policyClause": _policy_clause_for(r),
         })
     return cases
 
@@ -123,6 +136,7 @@ async def get_approval_case(
     return {
         "caseId": matching.case_id, "workflow": matching.workflow, "tier": matching.tier, "tool": matching.tool,
         "summary": summary, "ageMinutes": 0, "candidates": candidates,
+        "policyClause": _policy_clause_for(matching),
     }
 
 
