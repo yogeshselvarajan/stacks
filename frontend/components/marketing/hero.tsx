@@ -62,8 +62,18 @@ export function Hero() {
       };
     } catch {
       // Any environment where GSAP/SplitText can't operate (an
-      // unsupported browser, a test renderer) falls back to the
-      // element's own static, already-legible markup -- never a blank hero.
+      // unsupported browser, a test renderer, a plugin registration
+      // failure specific to one deployment) falls back to the element's
+      // own static, already-legible markup -- never a blank hero. This
+      // reset is required, not just the early return: gsap.set(...,
+      // {opacity: 0}) above may have already applied before the failure
+      // point, and without explicitly clearing it back to 1 the hero
+      // stays permanently invisible -- a real, live-observed bug (the
+      // deployed Amplify build rendered a blank hero with every element
+      // stuck at opacity:0), not a hypothetical one.
+      getGsap().set([eyebrowRef.current, headingRef.current, subheadRef.current, microcopyRef.current, ctaRef.current, noteRef.current, visualRef.current], {
+        clearProps: "opacity,transform",
+      });
       return;
     }
   }, []);
