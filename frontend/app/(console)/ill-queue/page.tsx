@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { IllQueueView } from "@/components/ill-queue-view";
 import { NewIllRequestForm } from "@/components/new-ill-request-form";
-import { IllRequest } from "@/lib/api/types";
+import { ApiError, IllRequest } from "@/lib/api/types";
 import { getIllQueue } from "@/lib/api/ill-queue";
 
 export default function IllQueuePage() {
   const [requests, setRequests] = useState<IllRequest[]>([]);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "ready" | "error" | "forbidden">("loading");
 
   useEffect(() => {
     document.title = "Stacks | ILL Queue";
@@ -20,7 +20,7 @@ export default function IllQueuePage() {
         setRequests(r);
         setStatus("ready");
       })
-      .catch(() => setStatus("error"));
+      .catch((err) => setStatus(err instanceof ApiError && err.status === 403 ? "forbidden" : "error"));
   }, []);
 
   useEffect(() => {

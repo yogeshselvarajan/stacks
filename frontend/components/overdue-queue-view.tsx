@@ -3,7 +3,7 @@ import { CheckCircle2, Clock, AlertTriangle, BrainCircuit } from "lucide-react";
 import { OverdueCase } from "@/lib/api/types";
 import { CardSkeleton } from "./skeletons";
 
-type Status = "loading" | "ready" | "error";
+type Status = "loading" | "ready" | "error" | "forbidden";
 type StepStatus = OverdueCase["tierHistory"][number]["status"];
 
 // frontend_architecture.md section 7.6: "Tier 1 sent -> Tier 2 pending -> ..."
@@ -24,6 +24,18 @@ export function OverdueQueueView({ cases, status }: { cases: OverdueCase[]; stat
         <CardSkeleton />
         <CardSkeleton />
       </div>
+    );
+  }
+
+  if (status === "forbidden") {
+    return (
+      <p
+        role="alert"
+        className="rounded-lg border p-4 text-sm"
+        style={{ borderColor: "var(--color-border)", background: "var(--color-tier-red-bg)", color: "var(--color-tier-red-text)" }}
+      >
+        You do not have access to this workflow.
+      </p>
     );
   }
 

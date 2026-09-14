@@ -33,6 +33,11 @@ describe("CalendarView", () => {
     expect(screen.getByText(/failed to load the calendar/i)).toBeInTheDocument();
   });
 
+  it("shows a clear access-denied message when status is forbidden, not the generic failure message", () => {
+    render(<CalendarView bookings={[]} status="forbidden" />);
+    expect(screen.getByText("You do not have access to this workflow.")).toBeInTheDocument();
+  });
+
   // Craft-bar coverage (frontend_architecture.md section 7.4 / the plan's
   // Global Constraint on six-state interactive elements): a pending
   // conflict's "awaiting review" badge is a real drill-in link into the

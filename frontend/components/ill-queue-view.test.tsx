@@ -28,6 +28,11 @@ describe("IllQueueView", () => {
     expect(screen.getByText(/failed to load the ill queue/i)).toBeInTheDocument();
   });
 
+  it("shows a clear access-denied message when status is forbidden, not the generic failure message", () => {
+    render(<IllQueueView requests={[]} status="forbidden" />);
+    expect(screen.getByText("You do not have access to this workflow.")).toBeInTheDocument();
+  });
+
   it("expanding a second time collapses the row again (toggle)", () => {
     render(<IllQueueView requests={ILL_QUEUE_FIXTURE} status="ready" />);
     const trigger = screen.getByText("The Left Hand of Darkness");

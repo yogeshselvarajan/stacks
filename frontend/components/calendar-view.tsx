@@ -5,7 +5,7 @@ import { CalendarBooking } from "@/lib/api/types";
 import { TierBadge } from "./tier-badge";
 import { RowSkeleton } from "./skeletons";
 
-type Status = "loading" | "ready" | "error";
+type Status = "loading" | "ready" | "error" | "forbidden";
 
 const PENDING_REVIEW_COLORS: Record<"YELLOW" | "RED", { text: string; bg: string }> = {
   YELLOW: { text: "var(--color-tier-yellow-text)", bg: "var(--color-tier-yellow-bg)" },
@@ -67,6 +67,10 @@ function PendingReviewBadge({ pendingReview }: { pendingReview?: CalendarBooking
 }
 
 export function CalendarView({ bookings, status }: { bookings: CalendarBooking[]; status: Status }) {
+  if (status === "forbidden") {
+    return <p style={{ color: "var(--color-tier-red-text)" }}>You do not have access to this workflow.</p>;
+  }
+
   if (status === "error") {
     return <p style={{ color: "var(--color-tier-red-text)" }}>Failed to load the calendar. Refresh to try again.</p>;
   }

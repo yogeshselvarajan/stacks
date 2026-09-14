@@ -7,7 +7,7 @@ import { IllRequest } from "@/lib/api/types";
 import { TierBadge } from "./tier-badge";
 import { RowSkeleton } from "./skeletons";
 
-type Status = "loading" | "ready" | "error";
+type Status = "loading" | "ready" | "error" | "forbidden";
 
 // Craft-bar item (frontend_architecture.md section 7.4 / the plan's Global
 // Constraint on six-state interactive elements): the row-expand toggle
@@ -29,6 +29,18 @@ const EXPAND_DISABLED_CLASS = "flex items-center gap-1.5 px-1 py-1 opacity-60";
 
 export function IllQueueView({ requests, status }: { requests: IllRequest[]; status: Status }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  if (status === "forbidden") {
+    return (
+      <p
+        role="alert"
+        className="rounded-lg border p-4 text-sm"
+        style={{ borderColor: "var(--color-border)", background: "var(--color-tier-red-bg)", color: "var(--color-tier-red-text)" }}
+      >
+        You do not have access to this workflow.
+      </p>
+    );
+  }
 
   if (status === "error") {
     return (

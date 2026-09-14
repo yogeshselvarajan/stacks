@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarView } from "@/components/calendar-view";
 import { NewBookingForm } from "@/components/new-booking-form";
-import { CalendarBooking } from "@/lib/api/types";
+import { ApiError, CalendarBooking } from "@/lib/api/types";
 import { getCalendar } from "@/lib/api/calendar";
 
 export default function CalendarPage() {
   const [bookings, setBookings] = useState<CalendarBooking[]>([]);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "ready" | "error" | "forbidden">("loading");
 
   useEffect(() => {
     document.title = "Stacks | Calendar";
@@ -20,7 +20,7 @@ export default function CalendarPage() {
         setBookings(b);
         setStatus("ready");
       })
-      .catch(() => setStatus("error"));
+      .catch((err) => setStatus(err instanceof ApiError && err.status === 403 ? "forbidden" : "error"));
   }, []);
 
   useEffect(() => {

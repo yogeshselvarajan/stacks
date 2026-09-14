@@ -40,6 +40,11 @@ describe("OverdueQueueView", () => {
     expect(screen.getByText(/failed to load the overdue queue/i)).toBeInTheDocument();
   });
 
+  it("shows a clear access-denied message when status is forbidden, not the generic failure message", () => {
+    render(<OverdueQueueView cases={[]} status="forbidden" />);
+    expect(screen.getByText("You do not have access to this workflow.")).toBeInTheDocument();
+  });
+
   it("each tier-history step pill uses the surface-2 nested-fill token, not the canvas background token", () => {
     render(<OverdueQueueView cases={OVERDUE_QUEUE_FIXTURE} status="ready" />);
     // "Informational" renders inside a nested <span class="font-medium">; the

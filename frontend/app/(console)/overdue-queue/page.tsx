@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { OverdueQueueView } from "@/components/overdue-queue-view";
 import { NewOverdueCaseForm } from "@/components/new-overdue-case-form";
-import { OverdueCase } from "@/lib/api/types";
+import { ApiError, OverdueCase } from "@/lib/api/types";
 import { getOverdueQueue } from "@/lib/api/overdue-queue";
 
 export default function OverdueQueuePage() {
   const [cases, setCases] = useState<OverdueCase[]>([]);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "ready" | "error" | "forbidden">("loading");
 
   useEffect(() => {
     document.title = "Stacks | Overdue";
@@ -20,7 +20,7 @@ export default function OverdueQueuePage() {
         setCases(c);
         setStatus("ready");
       })
-      .catch(() => setStatus("error"));
+      .catch((err) => setStatus(err instanceof ApiError && err.status === 403 ? "forbidden" : "error"));
   }, []);
 
   useEffect(() => {
