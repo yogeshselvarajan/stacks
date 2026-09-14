@@ -23,7 +23,7 @@ const PRODUCT_LINKS = [
 
 export function WelcomeFooter() {
   return (
-    <footer id="built-on-aws" className="border-t px-6 py-16" style={{ borderColor: "var(--color-border)" }}>
+    <footer className="border-t px-6 py-16" style={{ borderColor: "var(--color-border)" }}>
       <div className="mx-auto max-w-6xl">
         <Reveal>
           <div className="grid gap-10 md:grid-cols-2">

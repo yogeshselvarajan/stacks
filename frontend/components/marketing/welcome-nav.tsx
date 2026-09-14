@@ -6,6 +6,7 @@ import { Library } from "lucide-react";
 
 const LINKS = [
   { href: "#how-it-works", label: "How it works" },
+  { href: "#safety", label: "Safety" },
   { href: "#capabilities", label: "Capabilities" },
   { href: "#built-on-aws", label: "Built on AWS" },
 ];

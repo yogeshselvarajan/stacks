@@ -5,10 +5,11 @@ import WelcomePage from "./page";
 describe("WelcomePage", () => {
   it("renders every section of the public marketing page", () => {
     render(<WelcomePage />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("afternoons back");
-    expect(screen.getByText("How it works", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveAccessibleName(/afternoons back/);
+    expect(screen.getByText("Stacks starts where the existing system stops.")).toBeInTheDocument();
+    expect(screen.getByText("Not features. Cases Stacks actually completes.")).toBeInTheDocument();
     expect(screen.getByText("Six real components, working as one")).toBeInTheDocument();
-    expect(screen.getByText("Built on AWS", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getAllByText("Built on AWS", { selector: "p" }).length).toBeGreaterThan(0);
   });
 
   it("never requires authentication -- no redirect, no session check", () => {

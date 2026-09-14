@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
 import { WelcomeNav } from "@/components/marketing/welcome-nav";
 import { Hero } from "@/components/marketing/hero";
-import { HowItWorks } from "@/components/marketing/how-it-works";
+import { ProblemSection } from "@/components/marketing/problem-section";
+import { StartsWhereTheyStop } from "@/components/marketing/starts-where-they-stop";
+import { WorkflowsSection } from "@/components/marketing/workflows-section";
+import { ActionVsAnswer } from "@/components/marketing/action-vs-answer";
+import { SafetySection } from "@/components/marketing/safety-section";
+import { PolicySection } from "@/components/marketing/policy-section";
 import { CapabilityGrid } from "@/components/marketing/capability-grid";
+import { AuditPreview } from "@/components/marketing/audit-preview";
+import { AwsArchitecture } from "@/components/marketing/aws-architecture";
 import { CtaSection } from "@/components/marketing/cta-section";
 import { WelcomeFooter } from "@/components/marketing/welcome-footer";
 
@@ -29,8 +36,15 @@ export default function WelcomePage() {
       <WelcomeNav />
       <main>
         <Hero />
-        <HowItWorks />
+        <ProblemSection />
+        <StartsWhereTheyStop />
+        <WorkflowsSection />
+        <ActionVsAnswer />
+        <SafetySection />
+        <PolicySection />
         <CapabilityGrid />
+        <AuditPreview />
+        <AwsArchitecture />
         <CtaSection />
       </main>
       <WelcomeFooter />

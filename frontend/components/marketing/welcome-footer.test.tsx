@@ -25,8 +25,4 @@ describe("WelcomeFooter", () => {
     expect(screen.getByText("Amazon Cognito")).toBeInTheDocument();
   });
 
-  it("is anchorable from the nav via #built-on-aws", () => {
-    const { container } = render(<WelcomeFooter />);
-    expect(container.querySelector("#built-on-aws")).not.toBeNull();
-  });
 });
