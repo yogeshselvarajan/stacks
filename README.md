@@ -135,7 +135,6 @@ bff/          the FastAPI backend the web app talks to
 frontend/     the Next.js staff web application
 infra/        Terraform for the real AWS infrastructure
 tests/        unit, integration, and adversarial tests
-docs/         product, architecture, evaluation, and research documentation
 scripts/      provisioning and deployment scripts
 ```
 
