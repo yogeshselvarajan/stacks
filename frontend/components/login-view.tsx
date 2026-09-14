@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { Library } from "lucide-react";
+import { Reveal } from "@/components/motion/reveal";
 
 export function LoginView({
   onSubmit,
@@ -16,18 +19,28 @@ export function LoginView({
   const busy = status === "loading";
 
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--color-bg)" }}>
-      <form
-        className="w-80 rounded-lg border p-6"
-        style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!busy) onSubmit(username, password);
-        }}
-      >
-        <h1 className="mb-4 text-xl font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-ink)" }}>
-          Stacks
-        </h1>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4" style={{ background: "var(--color-bg)" }}>
+      <Reveal>
+        <Link href="/welcome" className="stacks-focus-ring flex items-center gap-2 rounded-md">
+          <Library size={20} aria-hidden="true" style={{ color: "var(--color-accent)" }} />
+          <span className="font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-ink)" }}>
+            Stacks
+          </span>
+        </Link>
+      </Reveal>
+
+      <Reveal delayMs={80}>
+        <form
+          className="w-80 rounded-lg border p-6"
+          style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!busy) onSubmit(username, password);
+          }}
+        >
+          <h1 className="mb-4 text-xl font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-ink)" }}>
+            Sign in
+          </h1>
 
         <label htmlFor="username" className="mb-1 block text-sm font-medium" style={{ color: "var(--color-ink)" }}>
           Username
@@ -95,7 +108,8 @@ export function LoginView({
         >
           {busy ? "Signing in..." : "Sign in"}
         </button>
-      </form>
+        </form>
+      </Reveal>
     </div>
   );
 }
