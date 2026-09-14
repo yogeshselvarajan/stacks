@@ -7,13 +7,15 @@ import { ApprovalInboxView } from "@/components/approval-inbox-view";
 import { ApprovalQueueProvider, useApprovalQueue } from "@/lib/approval-queue-context";
 import { getSession } from "@/lib/api/auth";
 import { useRequireSession } from "@/lib/use-require-session";
+import { usePolling } from "@/lib/use-polling";
 
 type Role = "circulation_staff" | "room_booking_staff" | "ill_coordinator" | "branch_manager";
 
 function TwoPane({ children }: { children: React.ReactNode }) {
   useRequireSession();
-  const { cases, status, resolvingCaseId } = useApprovalQueue();
+  const { cases, status, resolvingCaseId, refetch } = useApprovalQueue();
   const pathname = usePathname();
+  usePolling(refetch, 15000);
   const activeCaseId = pathname.startsWith("/approvals/") ? decodeURIComponent(pathname.slice("/approvals/".length)) : null;
   const [session, setSession] = useState<{ role: string; caseReviewRole: string | null } | null>(null);
 

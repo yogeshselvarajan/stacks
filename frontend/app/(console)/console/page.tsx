@@ -5,6 +5,7 @@ import { HomeView } from "@/components/home-view";
 import { getApprovals } from "@/lib/api/approvals";
 import { getAuditList } from "@/lib/api/audit";
 import { AuditEntry } from "@/lib/api/types";
+import { usePolling } from "@/lib/use-polling";
 
 function isToday(timestamp: string): boolean {
   const entryDate = new Date(timestamp);
@@ -26,7 +27,7 @@ export default function ConsolePage() {
   const [resolvedTodayCount, setResolvedTodayCount] = useState<number | null>(null);
   const [recentActivity, setRecentActivity] = useState<AuditEntry[] | null>(null);
 
-  useEffect(() => {
+  function fetchHomeData() {
     getApprovals()
       .then((cases) => {
         const counts = { GREEN: 0, YELLOW: 0, RED: 0 };
@@ -48,7 +49,13 @@ export default function ConsolePage() {
         // matters. resolvedTodayCount/recentActivity simply stay null, and
         // HomeView's ready-state rendering already handles null for both.
       });
+  }
+
+  useEffect(() => {
+    fetchHomeData();
   }, []);
+
+  usePolling(fetchHomeData, 15000);
 
   return (
     <HomeView

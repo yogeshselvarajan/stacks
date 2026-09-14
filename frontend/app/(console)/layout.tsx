@@ -8,6 +8,7 @@ import { getApprovals } from "@/lib/api/approvals";
 import { getSession } from "@/lib/api/auth";
 import { useRequireSession } from "@/lib/use-require-session";
 import { DURATION, EASE, prefersReducedMotion } from "@/lib/motion-tokens";
+import { usePolling } from "@/lib/use-polling";
 
 type Role = "circulation_staff" | "room_booking_staff" | "ill_coordinator" | "branch_manager";
 
@@ -17,14 +18,20 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
   const [approvalsCount, setApprovalsCount] = useState(0);
   const [session, setSession] = useState<{ role: string; caseReviewRole: string | null } | null>(null);
 
-  useEffect(() => {
+  function fetchApprovalsCount() {
     getApprovals()
       .then((cases) => setApprovalsCount(cases.filter((c) => c.tier !== "GREEN").length))
       .catch(() => {
         // The nav badge is supplementary -- a failed fetch here should never
         // block the page itself from rendering, so it just stays at 0.
       });
+  }
+
+  useEffect(() => {
+    fetchApprovalsCount();
   }, []);
+
+  usePolling(fetchApprovalsCount, 15000);
 
   useEffect(() => {
     getSession().then(setSession).catch(() => {});
