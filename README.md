@@ -10,11 +10,13 @@ A task-completion agent for library operations, built with the Strands Agents SD
 
 ## Try Stacks
 
-**Live demo: https://main.d1f4dnxaaugevn.amplifyapp.com/**
+| | |
+|---|---|
+| **Live demo** | https://main.d1f4dnxaaugevn.amplifyapp.com/ |
+| **Judge access** | Click Sign In, then the Hackathon Judges tab, then Continue as Hackathon Judge. One click, no password. |
+| **Demo data** | Synthetic library workflow data. The infrastructure and agent execution are real. |
 
-Open the site, click **Sign In**, choose the **Hackathon Judges** tab, then **Continue as Hackathon Judge**. One click, no password, full real permissions against the real deployed AWS backend. No credentials ever leave the server.
-
-**Demo environment, synthetic library workflow data.** The infrastructure and agent execution are real (real Cognito, real DynamoDB, real Bedrock AgentCore Runtime, real AgentCore Memory, real Bedrock Guardrails). The room bookings, ILL requests, and patron records the demo runs against are a seeded synthetic dataset, not a real library's live data.
+The infrastructure behind that one click is real: real Cognito, real DynamoDB, real Bedrock AgentCore Runtime, real AgentCore Memory, real Bedrock Guardrails. No credentials ever leave the server. The room bookings, ILL requests, and patron records the demo runs against are a seeded synthetic dataset, not a real library's live data.
 
 ---
 
@@ -43,7 +45,7 @@ It resolves the cases it can safely resolve, prepares the ones that need a secon
 
 ## The problem
 
-Libraries already have mature automation for predictable work: LibCal blocks an obviously double-booked slot, ILLiad auto-routes the routine borrow, an ILS fires a templated overdue notice on a fixed schedule. What none of that automation does is resolve the conflict that occurs anyway, route the genuinely ambiguous request, or differentiate an overdue response by patron circumstance. That remainder becomes a human review queue, at exactly the point where library staff have the least capacity to absorb it.
+Libraries already have mature automation for predictable work: LibCal blocks an obviously double-booked slot, ILLiad auto-routes the routine borrow, an ILS fires a templated overdue notice on a fixed schedule. What none of that automation does is resolve the conflict that occurs anyway, route the genuinely ambiguous request, or differentiate an overdue response by patron circumstance. That remainder becomes a human review queue, at exactly the point where library staff have the least capacity to absorb it: library staffing declined 3.6% in 2024 alone (11.5% at small libraries), while room reservation demand rose 25% year over year in the same period, and 57% of Library Journal's 2026 *Shifting Sands* survey respondents cite lack of staff capacity as an operational constraint.
 
 A concrete case: an interlibrary-loan request comes in for a title with two different editions available and no indication which one the patron wants. Existing systems can detect that ambiguity. They can't resolve it. Stacks does.
 

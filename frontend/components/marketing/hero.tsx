@@ -56,7 +56,25 @@ export function Hero() {
         .to(noteRef.current, { opacity: 1, y: 0, duration: DURATION.fast }, "-=0.1")
         .to(visualRef.current, { opacity: 1, y: 0, scale: 1, duration: DURATION.cinematic }, "-=0.3");
 
+      // Live-observed on the deployed Amplify build, 2026-09-14: the
+      // timeline above was constructed successfully (no exception, so the
+      // try/catch's own safety net never fired) but never visibly played
+      // in that specific environment, leaving every element stuck at the
+      // gsap.set(..., opacity:0) initial state indefinitely. Root cause
+      // not fully isolated (Turbopack's production chunking is a
+      // suspected factor, not confirmed). Rather than leave a
+      // half-understood animation as the only path to a visible hero, a
+      // hard timeout forces the same end state GSAP would have reached on
+      // its own, on every environment, regardless of whether the
+      // timeline actually ran.
+      const safetyTimeout = window.setTimeout(() => {
+        gsap.set([eyebrowRef.current, ...split.words, subheadRef.current, microcopyRef.current, ctaRef.current, noteRef.current, visualRef.current], {
+          clearProps: "opacity,transform",
+        });
+      }, 2000);
+
       return () => {
+        window.clearTimeout(safetyTimeout);
         tl.kill();
         split.revert();
       };
