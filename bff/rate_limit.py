@@ -62,6 +62,12 @@ _read_limiter = RateLimiter(max_requests=120, window_seconds=60)
 # session yet at login time.
 _login_limiter = RateLimiter(max_requests=10, window_seconds=60)
 
+# Account creation is more sensitive than a login attempt (it writes a new
+# real Cognito user rather than only checking one), so this stays tighter
+# than _login_limiter even though both are keyed by client IP for the same
+# reason: no session exists yet at signup time either.
+_signup_limiter = RateLimiter(max_requests=5, window_seconds=60)
+
 # Case creation triggers a real, billed agent invocation (unlike an
 # approval decision, which only resumes one already in flight), so this
 # budget is intentionally tighter than _approval_limiter's and kept as its
@@ -80,6 +86,10 @@ def get_read_rate_limiter() -> RateLimiter:
 
 def get_login_rate_limiter() -> RateLimiter:
     return _login_limiter
+
+
+def get_signup_rate_limiter() -> RateLimiter:
+    return _signup_limiter
 
 
 def get_case_creation_rate_limiter() -> RateLimiter:
@@ -103,6 +113,14 @@ def enforce_read_rate_limit(
 def enforce_login_rate_limit(
     request: Request,
     limiter: RateLimiter = Depends(get_login_rate_limiter),
+) -> None:
+    key = request.client.host if request.client else "unknown"
+    limiter.check(key)
+
+
+def enforce_signup_rate_limit(
+    request: Request,
+    limiter: RateLimiter = Depends(get_signup_rate_limiter),
 ) -> None:
     key = request.client.host if request.client else "unknown"
     limiter.check(key)
