@@ -83,6 +83,7 @@ def test_invokes_the_real_agent_with_a_prompt_naming_the_new_case(wired):
     assert payload["library_id"] == "lib_demo"
     assert payload["role"] == "ill_coordinator"
     assert ill_request_id in payload["prompt"]
+    assert payload["tool"] == "route_ill_request"
 
 
 def test_returns_pending_approval_when_the_agent_interrupts(wired):

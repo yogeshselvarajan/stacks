@@ -8,6 +8,7 @@ decision endpoint already uses.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -24,8 +25,11 @@ from stacks.types import AuditActor
 from bff.clients.agent_runtime import AgentRuntimeClient
 from bff.csrf import verify_csrf
 from bff.deps import get_agent_runtime_client, get_audit_sink, get_current_claims, get_repo
+from bff.rate_limit import enforce_approval_rate_limit
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 class CreateIllRequestBody(BaseModel):
@@ -34,7 +38,10 @@ class CreateIllRequestBody(BaseModel):
     requesterPatronId: str = Field(min_length=1)
 
 
-@router.post("/api/ill-requests", dependencies=[Depends(verify_csrf)])
+@router.post(
+    "/api/ill-requests",
+    dependencies=[Depends(verify_csrf), Depends(enforce_approval_rate_limit)],
+)
 async def create_ill_request(
     body: CreateIllRequestBody,
     claims: StaffIdentityClaims = Depends(get_current_claims),
@@ -76,6 +83,7 @@ async def create_ill_request(
         "library_id": claims.library_id,
         "case_review_role": claims.case_review_role,
         "session_id": f"case_create_{ill_request_id}_{uuid.uuid4().hex[:8]}",
+        "tool": "route_ill_request",
         "prompt": (
             f"Route the interlibrary loan request {ill_request_id} for library "
             f"{claims.library_id}. Evaluate it first, then, based on the "
@@ -86,6 +94,7 @@ async def create_ill_request(
     try:
         agent_response = await run_in_threadpool(agent_runtime_client.invoke, invoke_payload)
     except Exception:
+        logger.exception("ill_request_agent_invocation_failed")
         return {"illRequestId": ill_request_id, "status": "agent_invocation_failed", "outcome": None}
 
     if agent_response.get("stop_reason") == "interrupt":
