@@ -160,7 +160,24 @@ def make_route_ill_request(
             )
 
             valid_ids = {c["holding_id"] for c in evaluation["candidate_matches"]}
-            if chosen_holding_id is not None and chosen_holding_id not in valid_ids:
+            if not valid_ids:
+                # When candidate_matches was empty, there was never a
+                # valid id chosen_holding_id could have held -- whatever
+                # the caller sent (empty string, a hallucinated id, the
+                # literal word "none") can only ever mean "no match."
+                # Live-observed against the real deployed Nova Lite
+                # model, 2026-09-14: asked to leave this optional
+                # parameter unset for a genuine no-match outcome, it
+                # repeatedly sent a non-empty placeholder instead of
+                # omitting the argument, which hard-blocked a real
+                # HITL-approved resume rather than completing it (a
+                # genuine live 502, not a hypothetical). Falling through
+                # to the no-match outcome here is correct regardless of
+                # what chosen_holding_id actually contains, because
+                # valid_ids being empty already proves no other outcome
+                # was ever possible.
+                chosen_holding_id = None
+            elif chosen_holding_id is not None and chosen_holding_id not in valid_ids:
                 return {"status": "success", "content": [{"json": {"ill_request_id": ill_request_id, "status": "blocked_invalid_choice", "queue_status_write": None, "resolved_via_substitution": effective_resolved_via_substitution, "requester_patron_id": evaluation["requester_patron_id"], "subject_area": None}}]}
 
             # Validate rationale cites applicable policy clause (when present)

@@ -187,3 +187,26 @@ def test_a_decline_that_unexpectedly_commits_keeps_the_row_and_returns_an_error(
     response = client.post("/api/approvals/b1:b2/decision", json={"action": "decline"})
     assert response.status_code == 500
     assert any(r.case_id == "b1:b2" for r in sink.list_for_library("lib_demo"))
+
+
+def test_approve_of_a_genuine_no_match_ill_case_succeeds_and_deletes_the_row(wired):
+    # Live-observed, 2026-09-14: route_ill_request's own commit path
+    # correctly records "no_match_recorded" as a terminal outcome when
+    # its catalog search finds zero candidates -- there is no id left to
+    # commit to. Before this fix, this endpoint treated anything other
+    # than the literal string "committed" as a failed resume, so a
+    # genuinely successful ILL no-match approval 502'd on a real,
+    # already-resolved case.
+    client, sink, fake_client = wired
+    fake_client._response = {"status": "ok", "stop_reason": "end_turn", "tool_outcome": "no_match_recorded"}
+    response = client.post("/api/approvals/ill_req_123/decision", json={"action": "approve"})
+    assert response.status_code == 200
+    assert "ill_req_123" not in {r.case_id for r in sink.list_for_library("lib_demo")}
+
+
+def test_approve_that_hits_an_idempotent_already_committed_replay_still_succeeds(wired):
+    client, sink, fake_client = wired
+    fake_client._response = {"status": "ok", "stop_reason": "end_turn", "tool_outcome": "already_committed"}
+    response = client.post("/api/approvals/b1:b2/decision", json={"action": "approve"})
+    assert response.status_code == 200
+    assert "b1:b2" not in {r.case_id for r in sink.list_for_library("lib_demo")}

@@ -132,6 +132,51 @@ def test_no_match_recorded_path():
     assert result["content"][0]["json"]["status"] == "no_match_recorded"
 
 
+def _seed_genuine_no_match_request(repo):
+    """ill_ambiguous has real catalog candidates (multiple_editions); the
+    two tests below need a request whose catalog search is genuinely
+    empty (ambiguity == "no_match", candidate_matches == []), which no
+    existing fixture provides."""
+    from stacks.data.models import ILLRequestRecord
+
+    request = ILLRequestRecord(
+        ill_request_id="ill_no_catalog_match",
+        library_id="lib_demo",
+        requested_title="A Title Absolutely Not In Any Catalog Fixture",
+        requester_patron_id="patron_test",
+    )
+    repo.save_ill_request(request)
+    return request
+
+
+def test_no_match_recorded_path_when_the_model_sends_an_empty_string_instead_of_omitting_the_id():
+    # Live-observed against the real deployed Nova Lite model, 2026-09-14:
+    # asked to leave chosen_holding_id unset for a no_match outcome, it
+    # sent an empty string, not a JSON null/omitted argument. An
+    # unnormalized empty string previously fell through to
+    # blocked_invalid_choice (never a valid holding_id), which is what
+    # made a real live approval-resume attempt 502.
+    tool_fn, repo, _ = _build()
+    _seed_genuine_no_match_request(repo)
+    tool_fn(library_id="lib_demo", ill_request_id="ill_no_catalog_match", action="evaluate")
+    result = tool_fn(library_id="lib_demo", ill_request_id="ill_no_catalog_match", action="commit", chosen_holding_id="", rationale="No match per ILL-1 review.", approval_token={"token": "t", "approver_role": "ill_coordinator", "related_action_id": "ill_request:ill_no_catalog_match"})
+    assert result["content"][0]["json"]["status"] == "no_match_recorded"
+
+
+def test_no_match_recorded_path_when_the_model_sends_a_hallucinated_id_with_no_real_candidates():
+    # A stricter live-observed variant of the empty-string case above:
+    # with candidate_matches genuinely empty, any non-empty value the
+    # model sends can only ever mean "no match" -- there was never a
+    # valid id it could have chosen instead. Blocking on this rather than
+    # falling through to no_match_recorded is what turned a real
+    # HITL-approved resume into a repeating 502 live.
+    tool_fn, repo, _ = _build()
+    _seed_genuine_no_match_request(repo)
+    tool_fn(library_id="lib_demo", ill_request_id="ill_no_catalog_match", action="evaluate")
+    result = tool_fn(library_id="lib_demo", ill_request_id="ill_no_catalog_match", action="commit", chosen_holding_id="hold_nonexistent_hallucinated", rationale="No match per ILL-1 review.", approval_token={"token": "t", "approver_role": "ill_coordinator", "related_action_id": "ill_request:ill_no_catalog_match"})
+    assert result["content"][0]["json"]["status"] == "no_match_recorded"
+
+
 def test_policy_exception_red_flag_requires_approval():
     """Test that a flagged request with NO catalog candidates returns
     policy_exception ambiguity (not no_match), verifying the flag check

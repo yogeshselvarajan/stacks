@@ -61,7 +61,12 @@ evaluate response's own candidate_matches and requester_pattern before \
 choosing a commit action; if it returns a confident narrowed_candidate_id, \
 commit with that holding id and resolved_via_substitution=true; otherwise \
 commit reflects the case is still ambiguous exactly as it already would \
-without the specialist."""
+without the specialist. When route_ill_request's evaluate reports ambiguity \
+'no_match' (candidate_matches is empty), do not guess a holding id and do \
+not retry evaluate: commit immediately with chosen_holding_id left unset \
+(omitted, not any string value) and a rationale citing the applicable \
+policy clause. This is a complete, valid resolution recording the request \
+as unfulfillable, not a failure requiring a different id."""
 
 
 class StacksAgentBundle:

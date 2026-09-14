@@ -99,7 +99,18 @@ async def submit_decision(
         raise HTTPException(status_code=502, detail="the resume did not complete; the case is still paused")
 
     tool_outcome = resume_response.get("tool_outcome")
-    if body.action in ("approve", "edit") and tool_outcome != "committed":
+    # "committed" and "already_committed" (an idempotent replay, e.g. a
+    # double-click) apply to all three tools. "no_match_recorded" is a
+    # real, valid terminal outcome unique to route_ill_request: when a
+    # catalog search finds zero candidates, there is no id left to
+    # commit to, and the tool correctly records the request as
+    # unfulfillable rather than raising a fresh interrupt (per its own
+    # commit-branch logic). Live-observed, 2026-09-14: a genuinely
+    # resolved no_match_recorded case was previously rejected here as if
+    # the resume had failed, a real 502 on an approval that actually
+    # succeeded.
+    RESOLVED_OUTCOMES = {"committed", "already_committed", "no_match_recorded"}
+    if body.action in ("approve", "edit") and tool_outcome not in RESOLVED_OUTCOMES:
         raise HTTPException(status_code=502, detail="the resume did not result in a committed action")
     if body.action == "decline" and tool_outcome == "committed":
         raise HTTPException(status_code=500, detail="the declined case was unexpectedly committed")
