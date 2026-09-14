@@ -2,6 +2,61 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { LoginView } from "./login-view";
 
+function renderJudges(overrides: Partial<Parameters<typeof LoginView>[0]> = {}) {
+  return render(
+    <LoginView
+      mode="judges"
+      onModeChange={vi.fn()}
+      onSignIn={vi.fn()}
+      onSignUp={vi.fn()}
+      onJudgeLogin={vi.fn()}
+      status="idle"
+      errorMessage={null}
+      {...overrides}
+    />
+  );
+}
+
+describe("LoginView, judges mode (the default)", () => {
+  it("shows a one-click continue button, no username/password fields", () => {
+    renderJudges();
+    expect(screen.getByRole("button", { name: /continue as hackathon judge/i })).toBeEnabled();
+    expect(screen.queryByLabelText("Username")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+  });
+
+  it("calls onJudgeLogin when the continue button is clicked", () => {
+    const onJudgeLogin = vi.fn();
+    renderJudges({ onJudgeLogin });
+    fireEvent.click(screen.getByRole("button", { name: /continue as hackathon judge/i }));
+    expect(onJudgeLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it("loading state disables the button and shows a distinct label", () => {
+    renderJudges({ status: "loading" });
+    expect(screen.getByRole("button", { name: /signing in/i })).toBeDisabled();
+  });
+
+  it("error state shows the specific message", () => {
+    renderJudges({ status: "error", errorMessage: "Judge access is temporarily unavailable. Try the Sign in tab instead." });
+    expect(screen.getByText("Judge access is temporarily unavailable. Try the Sign in tab instead.")).toBeInTheDocument();
+  });
+
+  it("the Judges tab is the first tab and is selected", () => {
+    renderJudges();
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs[0]).toHaveTextContent("Hackathon Judges");
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("clicking the Sign in tab calls onModeChange with signin", () => {
+    const onModeChange = vi.fn();
+    renderJudges({ onModeChange });
+    fireEvent.click(screen.getByRole("tab", { name: "Sign in" }));
+    expect(onModeChange).toHaveBeenCalledWith("signin");
+  });
+});
+
 function renderSignIn(overrides: Partial<Parameters<typeof LoginView>[0]> = {}) {
   return render(
     <LoginView
@@ -9,6 +64,7 @@ function renderSignIn(overrides: Partial<Parameters<typeof LoginView>[0]> = {}) 
       onModeChange={vi.fn()}
       onSignIn={vi.fn()}
       onSignUp={vi.fn()}
+      onJudgeLogin={vi.fn()}
       status="idle"
       errorMessage={null}
       {...overrides}
@@ -80,10 +136,10 @@ describe("LoginView, sign-in mode", () => {
   });
 
   it("the login card sits on the surface token with a hairline border, not the canvas background", () => {
-    const { container } = renderSignIn();
-    const form = container.querySelector("form") as HTMLElement;
-    expect(form.style.background).toBe("var(--color-surface)");
-    expect(form.style.borderColor).toBe("var(--color-border)");
+    renderSignIn();
+    const card = screen.getByTestId("login-card");
+    expect(card.style.background).toBe("var(--color-surface)");
+    expect(card.style.borderColor).toBe("var(--color-border)");
   });
 
   it("clicking the Create account tab calls onModeChange with signup", () => {
@@ -101,6 +157,7 @@ function renderSignUp(overrides: Partial<Parameters<typeof LoginView>[0]> = {}) 
       onModeChange={vi.fn()}
       onSignIn={vi.fn()}
       onSignUp={vi.fn()}
+      onJudgeLogin={vi.fn()}
       status="idle"
       errorMessage={null}
       {...overrides}

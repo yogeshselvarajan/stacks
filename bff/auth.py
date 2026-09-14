@@ -17,13 +17,26 @@ from pydantic import BaseModel, field_validator
 
 from stacks.identity.claims import StaffIdentityClaims
 
-from bff.config import COGNITO_APP_CLIENT_ID, COGNITO_USER_POOL_ID, REGION, SESSION_COOKIE_NAME
+from bff.config import COGNITO_APP_CLIENT_ID, COGNITO_USER_POOL_ID, JUDGE_PASSWORD, JUDGE_USERNAME, REGION, SESSION_COOKIE_NAME
 from bff.csrf import CSRF_COOKIE_NAME, generate_csrf_token
 from bff.deps import get_current_claims
 from bff.rate_limit import enforce_login_rate_limit, enforce_signup_rate_limit
 from fastapi import Depends
 
 router = APIRouter()
+
+
+def _set_session_cookies(response: Response, id_token: str, expires_in: int) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME, value=id_token, httponly=True, secure=True,
+        samesite="Strict", max_age=expires_in,
+    )
+    # Not HttpOnly: the frontend must be able to read this value in order
+    # to echo it back as the X-Stacks-CSRF-Token header (bff/csrf.py).
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME, value=generate_csrf_token(), httponly=False, secure=True,
+        samesite="Strict", max_age=expires_in,
+    )
 
 # Self-service sign-up is scoped to this project's own single demo tenant
 # and to exactly the four roles the rest of the product already knows
@@ -91,16 +104,35 @@ def login(body: LoginRequest, response: Response) -> dict:
 
     id_token = result["AuthenticationResult"]["IdToken"]
     expires_in = result["AuthenticationResult"]["ExpiresIn"]
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME, value=id_token, httponly=True, secure=True,
-        samesite="Strict", max_age=expires_in,
-    )
-    # Not HttpOnly: the frontend must be able to read this value in order
-    # to echo it back as the X-Stacks-CSRF-Token header (bff/csrf.py).
-    response.set_cookie(
-        key=CSRF_COOKIE_NAME, value=generate_csrf_token(), httponly=False, secure=True,
-        samesite="Strict", max_age=expires_in,
-    )
+    _set_session_cookies(response, id_token, expires_in)
+    return {"status": "ok"}
+
+
+@router.post("/api/auth/judge-login", dependencies=[Depends(enforce_login_rate_limit)])
+def judge_login(response: Response) -> dict:
+    """One-click sign-in for hackathon judges. Takes no request body: the
+    real Cognito credential lives only in this server's own environment
+    (STACKS_JUDGE_USERNAME/STACKS_JUDGE_PASSWORD), never in the browser,
+    never in a network request the client sends, never in the frontend
+    bundle -- unlike a normal username/password login, a judge clicking
+    this button never sees or transmits a password at all.
+    """
+    if not JUDGE_PASSWORD:
+        raise HTTPException(status_code=503, detail="Judge access is not configured on this deployment.")
+
+    client = boto3.client("cognito-idp", region_name=REGION)
+    try:
+        result = client.initiate_auth(
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={"USERNAME": JUDGE_USERNAME, "PASSWORD": JUDGE_PASSWORD},
+            ClientId=COGNITO_APP_CLIENT_ID,
+        )
+    except ClientError as exc:
+        raise HTTPException(status_code=503, detail="Judge access is temporarily unavailable.") from exc
+
+    id_token = result["AuthenticationResult"]["IdToken"]
+    expires_in = result["AuthenticationResult"]["ExpiresIn"]
+    _set_session_cookies(response, id_token, expires_in)
     return {"status": "ok"}
 
 
@@ -149,14 +181,7 @@ def signup(body: SignupRequest, response: Response) -> dict:
     )
     id_token = result["AuthenticationResult"]["IdToken"]
     expires_in = result["AuthenticationResult"]["ExpiresIn"]
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME, value=id_token, httponly=True, secure=True,
-        samesite="Strict", max_age=expires_in,
-    )
-    response.set_cookie(
-        key=CSRF_COOKIE_NAME, value=generate_csrf_token(), httponly=False, secure=True,
-        samesite="Strict", max_age=expires_in,
-    )
+    _set_session_cookies(response, id_token, expires_in)
     return {"status": "ok"}
 
 

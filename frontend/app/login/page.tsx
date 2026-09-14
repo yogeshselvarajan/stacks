@@ -3,13 +3,15 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoginView } from "@/components/login-view";
-import { login, signup, SignupRole } from "@/lib/api/auth";
+import { judgeLogin, login, signup, SignupRole } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/types";
+
+type Mode = "judges" | "signin" | "signup";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<Mode>("judges");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -17,6 +19,22 @@ function LoginForm() {
     const redirectTarget = searchParams.get("redirect");
     const isSafeInternalPath = !!redirectTarget && redirectTarget.startsWith("/") && !redirectTarget.startsWith("//");
     router.push(isSafeInternalPath ? redirectTarget! : "/console");
+  }
+
+  async function handleJudgeLogin() {
+    setStatus("loading");
+    setErrorMessage(null);
+    try {
+      await judgeLogin();
+      goToConsole();
+    } catch (err) {
+      setStatus("error");
+      setErrorMessage(
+        err instanceof ApiError && err.status === 429
+          ? "Too many attempts. Wait a moment and try again."
+          : "Judge access is temporarily unavailable. Try the Sign in tab instead."
+      );
+    }
   }
 
   async function handleSignIn(username: string, password: string) {
@@ -55,7 +73,7 @@ function LoginForm() {
     }
   }
 
-  function handleModeChange(nextMode: "signin" | "signup") {
+  function handleModeChange(nextMode: Mode) {
     setMode(nextMode);
     setStatus("idle");
     setErrorMessage(null);
@@ -67,6 +85,7 @@ function LoginForm() {
       onModeChange={handleModeChange}
       onSignIn={handleSignIn}
       onSignUp={handleSignUp}
+      onJudgeLogin={handleJudgeLogin}
       status={status}
       errorMessage={errorMessage}
     />
@@ -81,7 +100,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <LoginView mode="signin" onModeChange={() => {}} onSignIn={() => {}} onSignUp={() => {}} status="idle" errorMessage={null} />
+        <LoginView mode="judges" onModeChange={() => {}} onSignIn={() => {}} onSignUp={() => {}} onJudgeLogin={() => {}} status="idle" errorMessage={null} />
       }
     >
       <LoginForm />

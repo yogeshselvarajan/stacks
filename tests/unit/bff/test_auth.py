@@ -78,3 +78,50 @@ def test_logout_clears_the_session_and_csrf_cookies(client):
 def test_logout_without_an_existing_session_still_returns_200(client):
     response = client.post("/api/auth/logout")
     assert response.status_code == 200
+
+
+def test_judge_login_signs_in_using_server_side_credentials_only(client, monkeypatch):
+    # No credential appears anywhere in the request the client sends --
+    # this is the whole point of the route. The username/password used
+    # to authenticate come only from the server's own config, never from
+    # body.
+    monkeypatch.setattr("bff.auth.JUDGE_USERNAME", "test-branch-manager")
+    monkeypatch.setattr("bff.auth.JUDGE_PASSWORD", "real-server-side-only-password")
+    fake_cognito_response = {
+        "AuthenticationResult": {"IdToken": "judge.id.token", "AccessToken": "judge.access.token", "ExpiresIn": 3600, "TokenType": "Bearer"}
+    }
+    with patch("bff.auth.boto3.client") as mock_boto_client:
+        mock_boto_client.return_value.initiate_auth.return_value = fake_cognito_response
+        response = client.post("/api/auth/judge-login")
+        call_kwargs = mock_boto_client.return_value.initiate_auth.call_args.kwargs
+
+    assert response.status_code == 200
+    assert call_kwargs["AuthParameters"] == {"USERNAME": "test-branch-manager", "PASSWORD": "real-server-side-only-password"}
+    set_cookie = response.headers["set-cookie"]
+    assert "stacks_session=judge.id.token" in set_cookie
+    assert "HttpOnly" in set_cookie
+
+
+def test_judge_login_returns_503_when_not_configured(client, monkeypatch):
+    monkeypatch.setattr("bff.auth.JUDGE_PASSWORD", "")
+    response = client.post("/api/auth/judge-login")
+    assert response.status_code == 503
+
+
+def test_judge_login_returns_503_not_401_if_cognito_call_itself_fails(client, monkeypatch):
+    # A misconfigured judge account (wrong password set server-side, or
+    # the account disabled) is an operational problem, not something to
+    # blame on "incorrect credentials" the way a normal failed login
+    # would -- the judge never entered anything.
+    from botocore.exceptions import ClientError
+
+    monkeypatch.setattr("bff.auth.JUDGE_USERNAME", "test-branch-manager")
+    monkeypatch.setattr("bff.auth.JUDGE_PASSWORD", "stale-password")
+    with patch("bff.auth.boto3.client") as mock_boto_client:
+        mock_boto_client.return_value.initiate_auth.side_effect = ClientError(
+            {"Error": {"Code": "NotAuthorizedException", "Message": "Incorrect username or password."}}, "InitiateAuth"
+        )
+        response = client.post("/api/auth/judge-login")
+
+    assert response.status_code == 503
+    assert "set-cookie" not in response.headers
