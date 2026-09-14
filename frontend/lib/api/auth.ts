@@ -19,6 +19,11 @@ export async function getSession(): Promise<SessionInfo> {
   return bffFetch<SessionInfo>("/api/session");
 }
 
+export async function logout(): Promise<void> {
+  const { bffFetch } = await import("./types");
+  await bffFetch<{ status: string }>("/api/auth/logout", { method: "POST" });
+}
+
 export type SignupRole = "branch_manager" | "circulation_staff" | "room_booking_staff" | "ill_coordinator";
 
 export async function signup(username: string, password: string, role: SignupRole): Promise<SessionInfo> {

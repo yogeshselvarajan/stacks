@@ -160,6 +160,18 @@ def signup(body: SignupRequest, response: Response) -> dict:
     return {"status": "ok"}
 
 
+@router.post("/api/auth/logout")
+def logout(response: Response) -> dict:
+    # No claims dependency here on purpose: logging out an already-expired
+    # or already-cleared session must still succeed (idempotent), not 401
+    # on its own way out. delete_cookie must be called with the exact same
+    # path/domain the cookie was set with, or the browser treats it as a
+    # different cookie and leaves the original in place.
+    response.delete_cookie(key=SESSION_COOKIE_NAME)
+    response.delete_cookie(key=CSRF_COOKIE_NAME)
+    return {"status": "ok"}
+
+
 @router.get("/api/session", response_model=SessionResponse)
 def get_session(claims: StaffIdentityClaims = Depends(get_current_claims)) -> SessionResponse:
     return SessionResponse(role=claims.role, libraryId=claims.library_id, caseReviewRole=claims.case_review_role)

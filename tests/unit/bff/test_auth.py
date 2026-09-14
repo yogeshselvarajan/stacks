@@ -54,3 +54,27 @@ def test_session_endpoint_returns_the_verified_claims(client):
 def test_session_endpoint_without_a_cookie_returns_401(client):
     response = client.get("/api/session")
     assert response.status_code == 401
+
+
+def test_logout_clears_the_session_and_csrf_cookies(client):
+    fake_cognito_response = {
+        "AuthenticationResult": {"IdToken": "fake.id.token", "AccessToken": "fake.access.token", "ExpiresIn": 3600, "TokenType": "Bearer"}
+    }
+    with patch("bff.auth.boto3.client") as mock_boto_client:
+        mock_boto_client.return_value.initiate_auth.return_value = fake_cognito_response
+        client.post("/api/auth/login", json={"username": "test-branch-manager", "password": "hunter2"})
+
+    response = client.post("/api/auth/logout")
+
+    assert response.status_code == 200
+    set_cookie_headers = response.headers.get_list("set-cookie")
+    session_cookie = next(h for h in set_cookie_headers if h.startswith("stacks_session="))
+    csrf_cookie = next(h for h in set_cookie_headers if h.startswith("stacks_csrf="))
+    assert 'stacks_session=""' in session_cookie or "stacks_session=" in session_cookie.split(";")[0]
+    assert "Max-Age=0" in session_cookie or "expires=" in session_cookie.lower()
+    assert "Max-Age=0" in csrf_cookie or "expires=" in csrf_cookie.lower()
+
+
+def test_logout_without_an_existing_session_still_returns_200(client):
+    response = client.post("/api/auth/logout")
+    assert response.status_code == 200

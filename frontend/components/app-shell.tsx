@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Inbox, Calendar, BookOpen, Clock3, ScrollText, Library, Home } from "lucide-react";
 import { LiveDot } from "@/components/motion/live-dot";
+import { AccountMenu } from "@/components/account-menu";
 
 type Role = "circulation_staff" | "room_booking_staff" | "ill_coordinator" | "branch_manager";
 
@@ -166,7 +167,7 @@ export function AppShell({
             <Library size={16} aria-hidden="true" style={{ color: "var(--color-accent)" }} />
             Stacks
           </span>
-          <span className="text-sm" style={{ color: "var(--color-ink-muted)" }}>{role.replace(/_/g, " ")}</span>
+          <AccountMenu role={role} tenantName={tenantName} />
         </header>
         <main className="p-6">{children}</main>
       </div>
