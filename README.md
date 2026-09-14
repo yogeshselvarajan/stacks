@@ -110,18 +110,7 @@ A judge should never need curl, the AWS CLI, or any developer tooling to experie
 
 ## How it works
 
-```mermaid
-flowchart LR
-    U[Staff or Judge] --> S[Stacks Web App]
-    S --> B[BFF]
-    B --> R[AgentCore Runtime]
-    R --> AG[Strands Agent]
-    AG --> SA[Safety Classifier]
-    SA -->|GREEN| AC[Action]
-    SA -->|YELLOW or RED| HU[Human Approval]
-    HU --> AC
-    AC --> AU[Audit Trail]
-```
+![Stacks architecture: library staff, the web application, scheduled workflows, Amazon Bedrock AgentCore, AI services, memory, the code-governed safety gate, human review, and the DynamoDB data layer](assets/architecture.png)
 
 ## Security boundaries
 
