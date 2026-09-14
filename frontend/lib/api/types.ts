@@ -65,8 +65,31 @@ export class ApiError extends Error {
 
 export const BFF_BASE_URL = process.env.NEXT_PUBLIC_BFF_BASE_URL ?? "http://localhost:8000";
 
+// Chrome and Edge Incognito/InPrivate windows block third-party cookies
+// by default, a stricter and separate mechanism from SameSite -- on this
+// cross-origin deployment (frontend on Amplify, BFF on a separate Lambda
+// Function URL) that means the session cookie never reaches the browser
+// at all in a private window, even though login itself succeeds: every
+// request after it 401s. authHeaders below is a fallback credential path
+// the frontend attaches itself, unaffected by any cookie policy; bff/deps.py's
+// get_current_claims checks it first and falls back to the cookie, so a
+// normal (non-private) browser window is unaffected either way.
+let inMemoryAuthToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  inMemoryAuthToken = token;
+}
+
+function authHeaders(): Record<string, string> {
+  return inMemoryAuthToken ? { Authorization: `Bearer ${inMemoryAuthToken}` } : {};
+}
+
 export async function bffFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BFF_BASE_URL}${path}`, { ...init, credentials: "include" });
+  const response = await fetch(`${BFF_BASE_URL}${path}`, {
+    ...init,
+    credentials: "include",
+    headers: { ...authHeaders(), ...(init?.headers ?? {}) },
+  });
   if (!response.ok) {
     throw new ApiError(response.status, await response.text());
   }

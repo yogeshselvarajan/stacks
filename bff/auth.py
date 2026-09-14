@@ -126,7 +126,7 @@ def login(body: LoginRequest, response: Response) -> dict:
     id_token = result["AuthenticationResult"]["IdToken"]
     expires_in = result["AuthenticationResult"]["ExpiresIn"]
     csrf_token = _set_session_cookies(response, id_token, expires_in)
-    return {"status": "ok", "csrfToken": csrf_token}
+    return {"status": "ok", "csrfToken": csrf_token, "idToken": id_token}
 
 
 @router.post("/api/auth/judge-login", dependencies=[Depends(enforce_login_rate_limit)])
@@ -154,7 +154,7 @@ def judge_login(response: Response) -> dict:
     id_token = result["AuthenticationResult"]["IdToken"]
     expires_in = result["AuthenticationResult"]["ExpiresIn"]
     csrf_token = _set_session_cookies(response, id_token, expires_in)
-    return {"status": "ok", "csrfToken": csrf_token}
+    return {"status": "ok", "csrfToken": csrf_token, "idToken": id_token}
 
 
 @router.post("/api/auth/signup", dependencies=[Depends(enforce_signup_rate_limit)])
@@ -203,7 +203,7 @@ def signup(body: SignupRequest, response: Response) -> dict:
     id_token = result["AuthenticationResult"]["IdToken"]
     expires_in = result["AuthenticationResult"]["ExpiresIn"]
     csrf_token = _set_session_cookies(response, id_token, expires_in)
-    return {"status": "ok", "csrfToken": csrf_token}
+    return {"status": "ok", "csrfToken": csrf_token, "idToken": id_token}
 
 
 @router.post("/api/auth/logout")

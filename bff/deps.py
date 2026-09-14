@@ -7,7 +7,7 @@ network calls.
 """
 from __future__ import annotations
 
-from fastapi import Cookie, HTTPException
+from fastapi import Cookie, Header, HTTPException
 
 from stacks.data.dynamodb_repository import DynamoDBLibraryDataRepository
 from stacks.data.repository import LibraryDataRepository
@@ -47,11 +47,32 @@ def _get_verifier() -> CognitoClaimsVerifier:
     return _verifier
 
 
-def get_current_claims(stacks_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME)) -> StaffIdentityClaims:
-    if stacks_session is None:
+def get_current_claims(
+    stacks_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    authorization: str | None = Header(default=None),
+) -> StaffIdentityClaims:
+    # Browsers with third-party cookies blocked (Chrome/Edge Incognito
+    # and InPrivate block them by default, independent of the cookie's
+    # own SameSite=None setting, since the frontend on Amplify and the
+    # BFF on a separate Lambda Function URL are different origins) never
+    # send stacks_session back at all -- login itself succeeds, but every
+    # request after it 401s with no cookie ever reaching the server. The
+    # Authorization header is a fallback credential path the frontend can
+    # attach itself, unaffected by any cookie policy. Checked first so a
+    # browser sending both (it never should once the frontend is fully
+    # switched over) can't have a stale cookie silently override a fresh
+    # token; the cookie path is untouched for anything that never sends
+    # the header, so normal-browser behavior can't regress.
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[len("Bearer ") :]
+    elif stacks_session is not None:
+        token = stacks_session
+
+    if token is None:
         raise HTTPException(status_code=401, detail="not authenticated")
     try:
-        return _get_verifier().verify(stacks_session)
+        return _get_verifier().verify(token)
     except InvalidClaimsError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 

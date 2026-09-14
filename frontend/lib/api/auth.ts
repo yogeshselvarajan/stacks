@@ -8,16 +8,18 @@ export interface SessionInfo {
 interface LoginResult {
   status: string;
   csrfToken: string | null;
+  idToken: string | null;
 }
 
 export async function login(username: string, password: string): Promise<void> {
-  const { bffFetch, setCsrfToken } = await import("./types");
+  const { bffFetch, setCsrfToken, setAuthToken } = await import("./types");
   const result = await bffFetch<LoginResult>("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
   setCsrfToken(result.csrfToken);
+  setAuthToken(result.idToken);
 }
 
 export async function getSession(): Promise<SessionInfo> {
@@ -28,25 +30,28 @@ export async function getSession(): Promise<SessionInfo> {
 }
 
 export async function logout(): Promise<void> {
-  const { bffFetch, setCsrfToken } = await import("./types");
+  const { bffFetch, setCsrfToken, setAuthToken } = await import("./types");
   await bffFetch<{ status: string }>("/api/auth/logout", { method: "POST" });
   setCsrfToken(null);
+  setAuthToken(null);
 }
 
 export async function judgeLogin(): Promise<void> {
-  const { bffFetch, setCsrfToken } = await import("./types");
+  const { bffFetch, setCsrfToken, setAuthToken } = await import("./types");
   const result = await bffFetch<LoginResult>("/api/auth/judge-login", { method: "POST" });
   setCsrfToken(result.csrfToken);
+  setAuthToken(result.idToken);
 }
 
 export type SignupRole = "branch_manager" | "circulation_staff" | "room_booking_staff" | "ill_coordinator";
 
 export async function signup(username: string, password: string, role: SignupRole): Promise<void> {
-  const { bffFetch, setCsrfToken } = await import("./types");
+  const { bffFetch, setCsrfToken, setAuthToken } = await import("./types");
   const result = await bffFetch<LoginResult>("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password, role }),
   });
   setCsrfToken(result.csrfToken);
+  setAuthToken(result.idToken);
 }
