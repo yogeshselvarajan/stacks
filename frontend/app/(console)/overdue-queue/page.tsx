@@ -29,7 +29,7 @@ export default function OverdueQueuePage() {
 
   return (
     <>
-      <NewOverdueCaseForm onCreated={refetch} />
+      {status !== "forbidden" && <NewOverdueCaseForm onCreated={refetch} />}
       <OverdueQueueView cases={cases} status={status} />
     </>
   );

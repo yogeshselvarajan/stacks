@@ -47,6 +47,16 @@ export default function ConsolePage() {
           router.push("/login");
           return;
         }
+        // I1 (RBAC plan final review fix round): a role with no approvals
+        // access correctly gets a 403 here, not a real error. Treat it as
+        // zero pending approvals rather than a page-level failure --
+        // HomeView's ready-state rendering already handles a null
+        // pendingByTier (via `pendingByTier?.YELLOW ?? 0`, etc).
+        if (err instanceof ApiError && err.status === 403) {
+          setPendingByTier(null);
+          setStatus("ready");
+          return;
+        }
         setStatus("error");
       });
 

@@ -29,7 +29,7 @@ export default function CalendarPage() {
 
   return (
     <>
-      <NewBookingForm onCreated={refetch} />
+      {status !== "forbidden" && <NewBookingForm onCreated={refetch} />}
       <CalendarView bookings={bookings} status={status} />
     </>
   );

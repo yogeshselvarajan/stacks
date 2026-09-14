@@ -29,7 +29,7 @@ export default function IllQueuePage() {
 
   return (
     <>
-      <NewIllRequestForm onCreated={refetch} />
+      {status !== "forbidden" && <NewIllRequestForm onCreated={refetch} />}
       <IllQueueView requests={requests} status={status} />
     </>
   );
