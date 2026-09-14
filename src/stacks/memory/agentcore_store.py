@@ -154,7 +154,7 @@ class AgentCoreMemoryStore:
             last_updated=datetime.now(timezone.utc),
         )
         self._client.create_event(
-            memory_id=self._memory_id, actor_id=namespace, session_id=f"{library_id}:{requester_key}",
+            memory_id=self._memory_id, actor_id=namespace, session_id=f"{library_id}_{requester_key}",
             messages=[(json.dumps(pattern.model_dump(mode="json")), "ASSISTANT")],
         )
 
@@ -174,7 +174,7 @@ class AgentCoreMemoryStore:
         namespace = _hardship_namespace(library_id, patron_id)
         fact = HardshipHistoryFact(flagged_at=flagged_at)
         self._client.create_event(
-            memory_id=self._memory_id, actor_id=namespace, session_id=f"{library_id}:{patron_id}",
+            memory_id=self._memory_id, actor_id=namespace, session_id=f"{library_id}_{patron_id}",
             messages=[(json.dumps(fact.model_dump(mode="json")), "ASSISTANT")],
         )
 

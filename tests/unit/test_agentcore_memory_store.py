@@ -118,6 +118,44 @@ def test_hardship_record_writes_with_the_same_composite_string_as_actor_id():
     assert kwargs["actor_id"] == "hardship:lib_demo:patron_2"
 
 
+def test_ill_record_writes_a_session_id_valid_for_the_real_createevent_api():
+    """Found live against the real deployed AgentCore Runtime, 2026-09-14:
+    a real create_event call failed with "ValidationException: Value at
+    'sessionId' failed to satisfy constraint: Member must satisfy regular
+    expression pattern: [a-zA-Z0-9][a-zA-Z0-9-_]*" because session_id was
+    built as "{library_id}:{requester_key}", and a colon is not in that
+    alphabet. This silently poisoned the calling tool's own result via
+    MemoryEventHook's fail-closed rewrite, making a genuinely successful
+    route_ill_request commit look like an error to the agent, the audit
+    trail, and the caller."""
+    import re
+
+    fake_client = MagicMock()
+    fake_client.retrieve_memories.return_value = []
+
+    with patch("stacks.memory.agentcore_store.MemoryClient", return_value=fake_client):
+        store = AgentCoreMemoryStore(memory_id="mem_1", region="us-west-2")
+        store.record_ill_routing_event(
+            "lib_demo", "patron_1", request_frequency_delta=1, subject_area=None, resolved_via_substitution=False,
+        )
+
+    _, kwargs = fake_client.create_event.call_args
+    assert re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9\-_]*", kwargs["session_id"])
+
+
+def test_hardship_record_writes_a_session_id_valid_for_the_real_createevent_api():
+    import re
+
+    fake_client = MagicMock()
+
+    with patch("stacks.memory.agentcore_store.MemoryClient", return_value=fake_client):
+        store = AgentCoreMemoryStore(memory_id="mem_1", region="us-west-2")
+        store.record_hardship_flag("lib_demo", "patron_2", flagged_at=datetime.now(timezone.utc))
+
+    _, kwargs = fake_client.create_event.call_args
+    assert re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9\-_]*", kwargs["session_id"])
+
+
 def test_ill_and_hardship_namespaces_for_the_same_library_and_key_never_collide():
     """The two workflows' composite namespaces must be disjoint even for
     the exact same library_id and entity key -- prefixed by workflow, so
