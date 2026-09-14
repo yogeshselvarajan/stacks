@@ -42,10 +42,12 @@ module "agentcore_runtime" {
   execution_role_arn  = module.iam.agent_runtime_execution_role_arn
   artifact_bucket     = var.runtime_artifact_bucket
   artifact_key        = var.runtime_artifact_key
-  bedrock_model_id    = var.bedrock_model_id
-  agentcore_memory_id = "" # filled in below once Plan 2's memory_id is on hand; see dev.tfvars
-  session_bucket_name = module.session_state.bucket_name
-  tags                = local.common_tags
+  bedrock_model_id          = var.bedrock_model_id
+  agentcore_memory_id       = var.agentcore_memory_id_short
+  bedrock_guardrail_id      = var.bedrock_guardrail_id
+  bedrock_guardrail_version = var.bedrock_guardrail_version
+  session_bucket_name       = module.session_state.bucket_name
+  tags                      = local.common_tags
 }
 
 module "eventbridge_sequencer" {

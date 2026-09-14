@@ -18,11 +18,13 @@ resource "aws_bedrockagentcore_agent_runtime" "stacks" {
   }
 
   environment_variables = {
-    STACKS_AWS_REGION          = var.region
-    STACKS_ENVIRONMENT         = var.environment
-    STACKS_BEDROCK_MODEL_ID    = var.bedrock_model_id
-    STACKS_AGENTCORE_MEMORY_ID = var.agentcore_memory_id
-    STACKS_SESSION_BUCKET      = var.session_bucket_name
+    STACKS_AWS_REGION                 = var.region
+    STACKS_ENVIRONMENT                = var.environment
+    STACKS_BEDROCK_MODEL_ID           = var.bedrock_model_id
+    STACKS_AGENTCORE_MEMORY_ID        = var.agentcore_memory_id
+    STACKS_SESSION_BUCKET             = var.session_bucket_name
+    STACKS_BEDROCK_GUARDRAIL_ID       = var.bedrock_guardrail_id
+    STACKS_BEDROCK_GUARDRAIL_VERSION  = var.bedrock_guardrail_version
   }
 
   network_configuration {

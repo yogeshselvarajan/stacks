@@ -8,6 +8,7 @@ output "table_arns" {
     audit_log    = aws_dynamodb_table.audit_log.arn
     spaces       = aws_dynamodb_table.spaces.arn
     patrons      = aws_dynamodb_table.patrons.arn
+    pending_approvals = aws_dynamodb_table.pending_approvals.arn
   }
 }
 

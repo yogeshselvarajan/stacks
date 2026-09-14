@@ -28,6 +28,17 @@ variable "agentcore_memory_id" {
   default = ""
 }
 
+variable "bedrock_guardrail_id" {
+  description = "Real Bedrock Guardrail id (scripts/provision_bedrock_guardrail.py). Empty string if not yet provisioned."
+  type        = string
+  default     = ""
+}
+
+variable "bedrock_guardrail_version" {
+  type    = string
+  default = ""
+}
+
 variable "session_bucket_name" {
   type = string
 }

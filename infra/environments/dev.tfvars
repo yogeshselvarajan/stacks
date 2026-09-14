@@ -1,7 +1,10 @@
 region      = "us-west-2"
 environment = "dev"
 
-# agentcore_memory_arn = "arn:aws:bedrock-agentcore:us-west-2:690845170953:memory/REPLACE_ME"
+agentcore_memory_arn      = "arn:aws:bedrock-agentcore:us-west-2:690845170953:memory/stacks_library_memory-0Vw7wM6xYJ"
+agentcore_memory_id_short = "stacks_library_memory-0Vw7wM6xYJ"
+bedrock_guardrail_id      = "qoa247yneemk"
+bedrock_guardrail_version = "1"
 
 # Switched from Claude Haiku 4.5 to Amazon Nova Lite. Claude Haiku's
 # agreementAvailability was NOT_AVAILABLE on this account (Bedrock's

@@ -42,7 +42,7 @@ def main() -> None:
     client = MemoryClient(region_name=REGION)
 
     result = client.create_memory_and_wait(
-        name="stacks-library-memory",
+        name="stacks_library_memory",
         strategies=[],
         description="Stacks: ILL substitution pattern and overdue hardship-flag history",
         event_expiry_days=365,
@@ -50,19 +50,21 @@ def main() -> None:
     memory_id = result["id"]
     print(f"Created memory: {memory_id}")
 
+    # AWS allows only one strategy of each type per Memory resource
+    # (confirmed live: a second add_semantic_strategy_and_wait call fails
+    # with "Only one strategy of each type is allowed"). One semantic
+    # strategy covering both use cases is architecturally sufficient
+    # anyway: agentcore_store.py's own NAMESPACE CONVENTION note already
+    # has the store compute one composite namespace string,
+    # f"{workflow_prefix}:{library_id}:{entity_key}" -- the "ill" vs
+    # "hardship" distinction lives in that value, not in a separate
+    # strategy definition, both at write and query time.
     client.add_semantic_strategy_and_wait(
-        memory_id=memory_id, name="ill_substitution_pattern",
-        description="Repeat ILL requester substitution-acceptance pattern",
+        memory_id=memory_id, name="stacks_recall_facts",
+        description="ILL substitution pattern and overdue hardship-flag history (workflow-prefixed namespace distinguishes the two)",
         namespace_templates=["{actorId}"],
     )
-    print("Added strategy: ill_substitution_pattern")
-
-    client.add_semantic_strategy_and_wait(
-        memory_id=memory_id, name="patron_hardship_history",
-        description="Patron hardship-flag history from prior overdue cycles",
-        namespace_templates=["{actorId}"],
-    )
-    print("Added strategy: patron_hardship_history")
+    print("Added strategy: stacks_recall_facts")
 
     print()
     print("Set before running the live tests:")

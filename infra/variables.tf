@@ -24,6 +24,23 @@ variable "agentcore_memory_arn" {
   default     = ""
 }
 
+variable "agentcore_memory_id_short" {
+  description = "The same resource as agentcore_memory_arn, but the bare id (STACKS_AGENTCORE_MEMORY_ID) main.py's AgentCoreMemoryStore actually expects."
+  type        = string
+  default     = ""
+}
+
+variable "bedrock_guardrail_id" {
+  description = "Real Bedrock Guardrail id (scripts/provision_bedrock_guardrail.py's own output). Empty string if not yet provisioned."
+  type        = string
+  default     = ""
+}
+
+variable "bedrock_guardrail_version" {
+  type    = string
+  default = ""
+}
+
 variable "bedrock_model_id" {
   description = "The Bedrock model ID or inference profile ID the deployed agent invokes. No guessed default -- must be set explicitly in dev.tfvars."
   type        = string

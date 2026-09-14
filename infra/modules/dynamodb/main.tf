@@ -121,6 +121,31 @@ resource "aws_dynamodb_table" "audit_log" {
   tags = merge(var.tags, { Name = "Stacks-AuditLog-${var.environment}" })
 }
 
+resource "aws_dynamodb_table" "pending_approvals" {
+  # Originally created ad hoc (aws dynamodb create-table, outside
+  # Terraform) during live-testing session 2026-09-08, along with a
+  # matching IAM statement applied by hand (aws iam put-role-policy) --
+  # both real drift, honestly named at the time and folded back into
+  # Terraform here. Schema matches the real, already-live table exactly
+  # (confirmed via aws dynamodb describe-table before writing this),
+  # imported into this resource's state rather than recreated.
+  name         = "Stacks-PendingApprovals-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "library_id"
+  range_key    = "case_id"
+
+  attribute {
+    name = "library_id"
+    type = "S"
+  }
+  attribute {
+    name = "case_id"
+    type = "S"
+  }
+
+  tags = merge(var.tags, { Name = "Stacks-PendingApprovals-${var.environment}" })
+}
+
 resource "aws_dynamodb_table" "spaces" {
   name         = "Stacks-Spaces-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
