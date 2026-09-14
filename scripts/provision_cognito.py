@@ -18,10 +18,18 @@ REGION = os.environ.get("STACKS_AWS_REGION", "us-west-2")
 POOL_NAME = "stacks-staff-pool"
 
 GROUPS = [
-    {"GroupName": "circulation_staff"},
-    {"GroupName": "room_booking_staff"},
-    {"GroupName": "ill_coordinator"},
-    {"GroupName": "branch_manager"},
+    # Precedence: lower number wins for role-mapping purposes if a user
+    # is ever a member of more than one group (unreachable today, every
+    # real user is single-group, but CognitoClaimsVerifier reads
+    # cognito:groups[0] as the authoritative role, and that ordering
+    # follows Precedence rather than group-creation order). branch_manager
+    # is the superset role, so it gets the lowest number (highest
+    # precedence); the three workflow-specific roles share one number
+    # since a user is expected to be in at most one of them.
+    {"GroupName": "branch_manager", "Precedence": 0},
+    {"GroupName": "circulation_staff", "Precedence": 10},
+    {"GroupName": "room_booking_staff", "Precedence": 10},
+    {"GroupName": "ill_coordinator", "Precedence": 10},
 ]
 
 TEST_USERS = [
