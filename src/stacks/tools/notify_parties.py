@@ -74,8 +74,8 @@ def make_notify_parties(
     def notify_parties(
         library_id: str,
         related_action_id: str,
-        subject: str,
-        body: str,
+        subject: str = "Update on your library request",
+        body: str = "There has been an update on your request. Please contact library staff for details.",
         approval_token: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Send a notification tied to an already-committed workflow action.
@@ -84,9 +84,17 @@ def make_notify_parties(
             library_id: Tenant scope.
             related_action_id: The resolve/route/chase commit this send is
                 authorized by, e.g. "room_conflict:b1:b2".
-            subject: Notification subject line.
+            subject: Notification subject line. Defaults to a generic line
+                when omitted -- live-observed against the real deployed
+                Nova Lite model, 2026-09-14: it sometimes calls this tool
+                with only library_id and related_action_id set, and a
+                required parameter with no default turned that into a
+                hard failure on an action that had already genuinely
+                committed. A default keeps the notification real and
+                useful instead of failing outright.
             body: LLM-composed notification body; always passed through the
                 Guardrail check regardless of the related action's own tier.
+                Same default-on-omission reasoning as subject above.
             approval_token: Required when the related action's tier is
                 YELLOW or RED.
 

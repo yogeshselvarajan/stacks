@@ -29,6 +29,27 @@ def test_green_action_sends_without_approval_token():
     assert set(sink.all()[0]["recipients"]) == {"patron_recurring", "patron_renter"}
 
 
+def test_sends_with_a_sensible_default_when_the_model_omits_subject_and_body():
+    """Found live against the real deployed AgentCore Runtime, 2026-09-14:
+    Nova Lite twice called notify_parties with only library_id and
+    related_action_id, omitting subject and body -- both were previously
+    required parameters with no default, so the call failed validation
+    before it could send anything, even though the related action had
+    already genuinely committed. A prompt-only fix (telling the model to
+    always include them) did not change this live-observed behavior, so
+    the tool itself now degrades to a real, generic notification instead
+    of failing outright."""
+    tool_fn, _, sink, tier_ledger = _build()
+    tier_ledger.record("lib_demo", "room_conflict:b_oneoff_a:b_recurring_a", Tier.GREEN, Workflow.ROOM_BOOKING)
+    result = tool_fn(library_id="lib_demo", related_action_id="room_conflict:b_oneoff_a:b_recurring_a")
+    body = result["content"][0]["json"]
+    assert body["status"] == "sent"
+    assert len(sink.all()) == 1
+    sent = sink.all()[0]
+    assert sent["subject"]
+    assert sent["body"]
+
+
 def test_yellow_action_requires_valid_approval_token():
     tool_fn, _, _, tier_ledger = _build()
     tier_ledger.record("lib_demo", "ill_request:ill_ambiguous", Tier.YELLOW, Workflow.ILL_ROUTING)
