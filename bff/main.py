@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from bff.auth import router as auth_router
 from bff.routes.approvals import router as approvals_router
+from bff.routes.cases import router as cases_router
 from bff.routes.reads import router as reads_router
 
 app = FastAPI(title="Stacks BFF")
@@ -28,3 +29,4 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(reads_router)
 app.include_router(approvals_router)
+app.include_router(cases_router)
