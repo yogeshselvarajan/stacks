@@ -33,7 +33,7 @@ export function Hero() {
 
           <p className="mt-5 max-w-xl text-lg leading-relaxed" style={{ color: "var(--color-ink-muted)" }}>
             Stacks resolves room-booking conflicts, routes ambiguous interlibrary-loan
-            requests, and chases overdue items — automatically when it&apos;s safe, and
+            requests, and chases overdue items, automatically when it&apos;s safe, and
             with a staff member in the loop whenever it isn&apos;t.
           </p>
 
@@ -56,7 +56,7 @@ export function Hero() {
           </div>
 
           <p className="mt-4 text-sm" style={{ color: "var(--color-ink-faint)" }}>
-            No setup for staff — real Cognito sign-in, real AWS infrastructure underneath.
+            No setup for staff. Real Cognito sign-in, real AWS infrastructure underneath.
           </p>
         </div>
 

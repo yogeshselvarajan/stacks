@@ -7,13 +7,13 @@ const STEPS = [
     number: "01",
     Icon: Inbox,
     title: "A case appears",
-    body: "A room-booking conflict, an ambiguous interlibrary-loan request, or an overdue item enters Stacks — the same workload a circulation desk already handles by hand today.",
+    body: "A room-booking conflict, an ambiguous interlibrary-loan request, or an overdue item enters Stacks, the same workload a circulation desk already handles by hand today.",
   },
   {
     number: "02",
     Icon: ScanSearch,
     title: "Stacks evaluates it",
-    body: "The agent checks the library's real policy clauses, recalls relevant history from AgentCore Memory, and — for ambiguous ILL requests — consults a specialist agent before deciding anything.",
+    body: "The agent checks the library's real policy clauses, recalls relevant history from AgentCore Memory, and, for ambiguous ILL requests, consults a specialist agent before deciding anything.",
   },
   {
     number: "03",

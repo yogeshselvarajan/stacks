@@ -14,7 +14,7 @@ export function CtaSection() {
             Your first case is one sign-in away.
           </h2>
           <p className="max-w-xl text-sm" style={{ color: "var(--color-ink-muted)" }}>
-            Real Cognito authentication, real AWS infrastructure — see a room-booking
+            Real Cognito authentication, real AWS infrastructure. See a room-booking
             conflict, an ILL request, or an overdue case resolve the moment it&apos;s safe to.
           </p>
           <Link

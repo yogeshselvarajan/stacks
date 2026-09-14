@@ -7,18 +7,18 @@ import { CtaSection } from "@/components/marketing/cta-section";
 import { WelcomeFooter } from "@/components/marketing/welcome-footer";
 
 export const metadata: Metadata = {
-  title: "Stacks — A library task-completion agent",
+  title: "Stacks, a library task-completion agent",
   description:
-    "Stacks resolves room-booking conflicts, routes ambiguous interlibrary-loan requests, and chases overdue items — automatically when it's safe, with a human in the loop when it isn't. Built on Amazon Bedrock AgentCore.",
+    "Stacks resolves room-booking conflicts, routes ambiguous interlibrary-loan requests, and chases overdue items, automatically when it's safe, with a human in the loop when it isn't. Built on Amazon Bedrock AgentCore.",
   openGraph: {
-    title: "Stacks — A library task-completion agent",
+    title: "Stacks, a library task-completion agent",
     description:
       "Automate the routine, keep a human on anything sensitive. Built on Amazon Bedrock AgentCore for the Agents for Humans hackathon.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Stacks — A library task-completion agent",
+    title: "Stacks, a library task-completion agent",
     description: "Automate the routine, keep a human on anything sensitive.",
   },
 };

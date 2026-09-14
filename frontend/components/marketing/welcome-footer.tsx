@@ -35,7 +35,7 @@ export function WelcomeFooter() {
                 </span>
               </div>
               <p className="mt-3 max-w-sm text-sm" style={{ color: "var(--color-ink-muted)" }}>
-                A library task-completion agent — room-booking conflicts, interlibrary-loan
+                A library task-completion agent: room-booking conflicts, interlibrary-loan
                 routing, and overdue chasing, with a human in the loop wherever it matters.
               </p>
             </div>

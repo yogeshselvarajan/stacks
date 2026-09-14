@@ -17,7 +17,7 @@ const CAPABILITIES = [
   {
     Icon: Clock3,
     title: "Overdue Escalation Sequencer",
-    body: "Runs the nightly reminder ladder as a durable, session-backed process — resumable, never double-sent, never stuck mid-tier.",
+    body: "Runs the nightly reminder ladder as a durable, session-backed process: resumable, never double-sent, never stuck mid-tier.",
     badge: "Bedrock AgentCore Runtime + EventBridge",
   },
   {
@@ -29,13 +29,13 @@ const CAPABILITIES = [
   {
     Icon: Brain,
     title: "AgentCore Memory",
-    body: "Recalls a patron or requester's real history — prior hardship flags, prior substitutions — so staff see context, not a cold case.",
+    body: "Recalls a patron or requester's real history, prior hardship flags, prior substitutions, so staff see context, not a cold case.",
     badge: "Amazon Bedrock AgentCore Memory",
   },
   {
     Icon: UserCheck,
     title: "HITL Approval Gate",
-    body: "A code-governed classifier, never the model itself, decides GREEN, YELLOW, or RED — and RED cannot resolve without a qualified human.",
+    body: "A code-governed classifier, never the model itself, decides GREEN, YELLOW, or RED, and RED cannot resolve without a qualified human.",
     badge: "Deterministic, not a model decision",
   },
 ];
