@@ -2,7 +2,13 @@
 
 A task completion agent for library operations, built with the Strands Agents SDK and deployed on Amazon Bedrock AgentCore.
 
-Entered in the [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/), Good Neighbor Agents track.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Built with Strands Agents SDK](https://img.shields.io/badge/Built%20with-Strands%20Agents%20SDK-blue)](https://strandsagents.com/)
+[![Deployed on Amazon Bedrock AgentCore](https://img.shields.io/badge/Deployed%20on-Amazon%20Bedrock%20AgentCore-orange)](https://aws.amazon.com/bedrock/agentcore/)
+
+## About this submission
+
+This is a solo entry in the [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/) (Amazon Web Services, hosted on Devpost, submission period ended September 14, 2026), in the **Good Neighbor Agents** track: agents that help groups of people, not just one, for neighborhoods, nonprofits, schools, and libraries. The hackathon's brief was to build a new AI agent with the Strands Agents SDK that takes on a real, repetitive task and handles it end to end, rather than just chatting about it. If you are a judge or a first time visitor, the short version of what to look at is: `docs/architecture/final_architecture.md` for how it is built, `docs/product/final_product_spec.md` for what it does and why, and the "Running it locally" section below to try it yourself.
 
 ## The problem
 
