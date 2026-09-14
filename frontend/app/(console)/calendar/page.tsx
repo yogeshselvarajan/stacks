@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CalendarView } from "@/components/calendar-view";
+import { NewBookingForm } from "@/components/new-booking-form";
 import { CalendarBooking } from "@/lib/api/types";
 import { getCalendar } from "@/lib/api/calendar";
 
@@ -13,9 +14,23 @@ export default function CalendarPage() {
     document.title = "Stacks | Calendar";
   }, []);
 
-  useEffect(() => {
-    getCalendar().then((b) => { setBookings(b); setStatus("ready"); }).catch(() => setStatus("error"));
+  const refetch = useCallback(() => {
+    getCalendar()
+      .then((b) => {
+        setBookings(b);
+        setStatus("ready");
+      })
+      .catch(() => setStatus("error"));
   }, []);
 
-  return <CalendarView bookings={bookings} status={status} />;
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return (
+    <>
+      <NewBookingForm onCreated={refetch} />
+      <CalendarView bookings={bookings} status={status} />
+    </>
+  );
 }
