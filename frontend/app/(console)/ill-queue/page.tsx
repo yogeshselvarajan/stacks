@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { IllQueueView } from "@/components/ill-queue-view";
+import { NewIllRequestForm } from "@/components/new-ill-request-form";
 import { IllRequest } from "@/lib/api/types";
 import { getIllQueue } from "@/lib/api/ill-queue";
 
@@ -13,7 +14,7 @@ export default function IllQueuePage() {
     document.title = "Stacks | ILL Queue";
   }, []);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     getIllQueue()
       .then((r) => {
         setRequests(r);
@@ -22,5 +23,14 @@ export default function IllQueuePage() {
       .catch(() => setStatus("error"));
   }, []);
 
-  return <IllQueueView requests={requests} status={status} />;
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return (
+    <>
+      <NewIllRequestForm onCreated={refetch} />
+      <IllQueueView requests={requests} status={status} />
+    </>
+  );
 }
