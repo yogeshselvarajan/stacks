@@ -14,7 +14,7 @@ from typing import Literal
 
 import boto3
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Cookie, HTTPException, Response
 from pydantic import BaseModel, field_validator
 
 from stacks.identity.claims import StaffIdentityClaims
@@ -37,17 +37,26 @@ router = APIRouter()
 _SAMESITE: Literal["Strict", "Lax", "None"] = os.environ.get("STACKS_COOKIE_SAMESITE", "Strict")  # type: ignore[assignment]
 
 
-def _set_session_cookies(response: Response, id_token: str, expires_in: int) -> None:
+def _set_session_cookies(response: Response, id_token: str, expires_in: int) -> str:
     response.set_cookie(
         key=SESSION_COOKIE_NAME, value=id_token, httponly=True, secure=True,
         samesite=_SAMESITE, max_age=expires_in,
     )
-    # Not HttpOnly: the frontend must be able to read this value in order
-    # to echo it back as the X-Stacks-CSRF-Token header (bff/csrf.py).
+    # Not HttpOnly, so the browser still attaches it automatically on
+    # same-site deployments. On a cross-origin deployment (frontend on
+    # Amplify, BFF on a separate Lambda Function URL) the frontend's own
+    # JS can never read a cookie that belongs to a different origin, so
+    # the cookie alone is not enough there -- the token is also returned
+    # in the response body (see the callers below and GET /api/session)
+    # so cross-origin JS has a way to obtain it and echo it back as the
+    # X-Stacks-CSRF-Token header (bff/csrf.py). The cookie remains the
+    # server-side half of the double-submit comparison either way.
+    csrf_token = generate_csrf_token()
     response.set_cookie(
-        key=CSRF_COOKIE_NAME, value=generate_csrf_token(), httponly=False, secure=True,
+        key=CSRF_COOKIE_NAME, value=csrf_token, httponly=False, secure=True,
         samesite=_SAMESITE, max_age=expires_in,
     )
+    return csrf_token
 
 # Self-service sign-up is scoped to this project's own single demo tenant
 # and to exactly the four roles the rest of the product already knows
@@ -99,6 +108,7 @@ class SessionResponse(BaseModel):
     role: str
     libraryId: str
     caseReviewRole: str | None
+    csrfToken: str | None
 
 
 @router.post("/api/auth/login", dependencies=[Depends(enforce_login_rate_limit)])
@@ -115,8 +125,8 @@ def login(body: LoginRequest, response: Response) -> dict:
 
     id_token = result["AuthenticationResult"]["IdToken"]
     expires_in = result["AuthenticationResult"]["ExpiresIn"]
-    _set_session_cookies(response, id_token, expires_in)
-    return {"status": "ok"}
+    csrf_token = _set_session_cookies(response, id_token, expires_in)
+    return {"status": "ok", "csrfToken": csrf_token}
 
 
 @router.post("/api/auth/judge-login", dependencies=[Depends(enforce_login_rate_limit)])
@@ -143,8 +153,8 @@ def judge_login(response: Response) -> dict:
 
     id_token = result["AuthenticationResult"]["IdToken"]
     expires_in = result["AuthenticationResult"]["ExpiresIn"]
-    _set_session_cookies(response, id_token, expires_in)
-    return {"status": "ok"}
+    csrf_token = _set_session_cookies(response, id_token, expires_in)
+    return {"status": "ok", "csrfToken": csrf_token}
 
 
 @router.post("/api/auth/signup", dependencies=[Depends(enforce_signup_rate_limit)])
@@ -192,8 +202,8 @@ def signup(body: SignupRequest, response: Response) -> dict:
     )
     id_token = result["AuthenticationResult"]["IdToken"]
     expires_in = result["AuthenticationResult"]["ExpiresIn"]
-    _set_session_cookies(response, id_token, expires_in)
-    return {"status": "ok"}
+    csrf_token = _set_session_cookies(response, id_token, expires_in)
+    return {"status": "ok", "csrfToken": csrf_token}
 
 
 @router.post("/api/auth/logout")
@@ -209,5 +219,17 @@ def logout(response: Response) -> dict:
 
 
 @router.get("/api/session", response_model=SessionResponse)
-def get_session(claims: StaffIdentityClaims = Depends(get_current_claims)) -> SessionResponse:
-    return SessionResponse(role=claims.role, libraryId=claims.library_id, caseReviewRole=claims.case_review_role)
+def get_session(
+    claims: StaffIdentityClaims = Depends(get_current_claims),
+    stacks_csrf: str | None = Cookie(default=None, alias=CSRF_COOKIE_NAME),
+) -> SessionResponse:
+    # The browser attaches this cookie to the request regardless of the
+    # page's own origin (SameSite=None on a cross-origin deployment); it
+    # is only JS running on the BFF's own origin that could read it via
+    # document.cookie, which the frontend never is. Handing the value
+    # back here, once per session-check, is what lets cross-origin JS
+    # obtain it at all -- see _set_session_cookies' own comment.
+    return SessionResponse(
+        role=claims.role, libraryId=claims.library_id,
+        caseReviewRole=claims.case_review_role, csrfToken=stacks_csrf,
+    )

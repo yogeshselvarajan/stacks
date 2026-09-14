@@ -48,12 +48,55 @@ def test_session_endpoint_returns_the_verified_claims(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body == {"role": "branch_manager", "libraryId": "lib_demo", "caseReviewRole": "librarian_case_review"}
+    assert body == {
+        "role": "branch_manager", "libraryId": "lib_demo",
+        "caseReviewRole": "librarian_case_review", "csrfToken": None,
+    }
 
 
 def test_session_endpoint_without_a_cookie_returns_401(client):
     response = client.get("/api/session")
     assert response.status_code == 401
+
+
+def test_session_endpoint_echoes_the_csrf_cookie_value_in_the_body(client):
+    # Cross-origin JS (frontend on a different domain than the BFF) can
+    # never read this cookie itself via document.cookie, only a fetch
+    # response body it made itself -- this is what makes that possible.
+    from stacks.identity.claims import StaffIdentityClaims
+
+    fake_claims = StaffIdentityClaims(role="branch_manager", library_id="lib_demo", case_review_role=None)
+
+    def _fake_get_current_claims():
+        return fake_claims
+
+    from bff.deps import get_current_claims
+    from bff.main import app
+    app.dependency_overrides[get_current_claims] = _fake_get_current_claims
+    try:
+        client.cookies.set("stacks_csrf", "the-csrf-cookie-value")
+        response = client.get("/api/session")
+    finally:
+        app.dependency_overrides.pop(get_current_claims, None)
+
+    assert response.status_code == 200
+    assert response.json()["csrfToken"] == "the-csrf-cookie-value"
+
+
+def test_login_returns_the_csrf_token_in_the_response_body(client):
+    fake_cognito_response = {
+        "AuthenticationResult": {"IdToken": "fake.id.token", "AccessToken": "fake.access.token", "ExpiresIn": 3600, "TokenType": "Bearer"}
+    }
+    with patch("bff.auth.boto3.client") as mock_boto_client:
+        mock_boto_client.return_value.initiate_auth.return_value = fake_cognito_response
+        response = client.post("/api/auth/login", json={"username": "test-branch-manager", "password": "hunter2"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert isinstance(body["csrfToken"], str) and body["csrfToken"]
+    csrf_cookie = next(h for h in response.headers.get_list("set-cookie") if h.startswith("stacks_csrf="))
+    assert f"stacks_csrf={body['csrfToken']}" in csrf_cookie
 
 
 def test_logout_clears_the_session_and_csrf_cookies(client):

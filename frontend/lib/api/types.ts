@@ -78,16 +78,23 @@ export async function bffFetch<T>(path: string, init?: RequestInit): Promise<T> 
 // its value back as a header the BFF compares against the cookie it
 // received on the same request -- a cross-site form can't read this
 // cookie to also set the header, so it can't produce a match.
-const CSRF_COOKIE_NAME = "stacks_csrf";
+//
+// On this deployment the frontend (Amplify) and the BFF (a separate
+// Lambda Function URL) are different origins, so document.cookie here
+// can never see a cookie that belongs to the BFF's origin -- the browser
+// still attaches it to requests, but this page's own JS cannot read its
+// value. The BFF hands the value back in the login/session response
+// bodies instead (readable cross-origin, since it's the fetch response
+// this page itself made); setCsrfToken stores it in memory for
+// csrfHeaders to echo back on every mutating request.
 const CSRF_HEADER_NAME = "X-Stacks-CSRF-Token";
 
-function readCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : null;
+let inMemoryCsrfToken: string | null = null;
+
+export function setCsrfToken(token: string | null): void {
+  inMemoryCsrfToken = token;
 }
 
 export function csrfHeaders(): Record<string, string> {
-  const token = readCookie(CSRF_COOKIE_NAME);
-  return token ? { [CSRF_HEADER_NAME]: token } : {};
+  return inMemoryCsrfToken ? { [CSRF_HEADER_NAME]: inMemoryCsrfToken } : {};
 }
